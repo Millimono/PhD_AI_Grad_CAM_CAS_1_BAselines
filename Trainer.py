@@ -134,7 +134,9 @@ class Trainer:
             grads = torch.autograd.grad(target_logits.sum(), features, retain_graph=True, create_graph=True)[0]
 
             cams = self.grad_cam(features, grads)
-            self.visualize_gradcam(self.fixed_images, cams, self.fixed_labels, self.current_epoch, batch_idx=0, max_images=len(self.fixed_images))
+            preds = outputs.argmax(dim=1)
+
+            self.visualize_gradcam(self.fixed_images, cams, self.fixed_labels, self.current_epoch, batch_idx=0, max_images=len(self.fixed_images),preds=preds)
 
 
         return total_loss / len(self.dataloader)
@@ -166,9 +168,10 @@ class Trainer:
 
         return mask
 
+    idx_to_class = {0: "covid", 1: "nocovid"}
 
     @torch.no_grad()
-    def visualize_gradcam(self, images, cams, labels, epoch, batch_idx, max_images=4):
+    def visualize_gradcam(self, images, cams, labels, epoch, batch_idx, max_images=4, preds=None):
         cams = cams.squeeze(1)  # (B, H, W)
         cams = (cams - cams.min(dim=1, keepdim=True)[0]) / (cams.max(dim=1, keepdim=True)[0] + 1e-5)
         cams = F.interpolate(cams.unsqueeze(1), size=(224, 224), mode='bilinear', align_corners=False).squeeze(1)
@@ -199,10 +202,17 @@ class Trainer:
             axes[1].set_title("Grad-CAM")
             axes[1].axis("off")
 
+             # Ajout nom classes
+            true_cls = idx_to_class[labels[i].item()]
+            pred_cls = idx_to_class[preds[i].item()] if preds is not None else "N/A"    
+
+
 
 
             mode = "cam_supervised" if self.use_cam_loss else "baseline"
-            filename = os.path.join(folder_path, f"{mode}_epoch_{epoch}_batch_{batch_idx}_img_{i}.png")
+            filename = os.path.join(folder_path, 
+                    f"{mode}_epoch_{epoch}_batch_{batch_idx}_img_{i}_true_{true_cls}_pred_{pred_cls}.png"
+)
             #filename = os.path.join(folder_path, f"epoch_{epoch}_batch_{batch_idx}_img_{i}.png")
 
             plt.tight_layout()
@@ -379,7 +389,9 @@ class Trainer:
         """
         Charge un modèle complet sauvegardé (structure + poids)
         """
-        model = torch.load(filepath, map_location=device)
+        # model = torch.load(filepath, map_location=device)
+        model = torch.load(filepath, map_location=device, weights_only=False)
+
         model.eval()
         print(f"✅ Modèle chargé depuis {filepath}")
         return model
