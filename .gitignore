@@ -1,0 +1,5 @@
+# Ignorer le fichier
+fixed_images_labels.pt
+
+# Ignorer le dossier et tout son contenu
+Resultats/
