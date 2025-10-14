@@ -3,11 +3,9 @@ import torch.nn as nn
 import torchvision.models as models
 
 class FeatureExtractor(nn.Module):
-    #def __init__(self):
+
     def __init__(self, backbone_name='resnet18', pretrained=False):
         super().__init__()
-        # backbone = models.resnet18(pretrained=False)  # Pas de pré-entraînement pour éviter les biais
-        # self.features = nn.Sequential(*list(backbone.children())[:-2])  # jusqu'à conv5
 
         # Charger dynamiquement le backbone
         if hasattr(models, backbone_name):
@@ -15,7 +13,7 @@ class FeatureExtractor(nn.Module):
         else:
             raise ValueError(f"Backbone '{backbone_name}' non reconnu par torchvision.models")
 
-        # Obtenir le nombre de canaux du dernier bloc conv (dépend du modèle)
+        # Obtenir le nombre de canaux du dernier bloc conv (cela dépend du modèle)
         if 'resnet' in backbone_name:
             self.out_channels = backbone.fc.in_features
             self.features = nn.Sequential(*list(backbone.children())[:-2])  # jusqu'à conv5
@@ -56,12 +54,9 @@ class ClassifierHead(nn.Module):
         return self.fc(x)
 
 class FullModel(nn.Module):
-    #def __init__(self, num_classes):
     def __init__(self, num_classes, backbone_name='resnet18', pretrained=False):
 
         super().__init__()
-        # self.feature_extractor = FeatureExtractor()
-        # self.classifier = ClassifierHead(512, num_classes)  # 512 pour ResNet18
 
         self.feature_extractor = FeatureExtractor(backbone_name=backbone_name, pretrained=pretrained)
         self.classifier = ClassifierHead(self.feature_extractor.out_channels, num_classes)
