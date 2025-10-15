@@ -261,7 +261,7 @@ def main():
             "best_f1_score": round(best_f1, 4),
             "best_epoch": best_epoch
         }
-    trainer.save_dict_as_json(best_model_info, "best_model_info.json")
+    trainer.save_list_as_json(best_model_info, "best_model_info.json")
 
     
 
