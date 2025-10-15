@@ -85,6 +85,16 @@ def compute_metrics(true_labels, preds, probs, average='macro'):
 
     return acc, prec, rec, f1, auc
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', '1', 'y'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', '0', 'n'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 
 def main():
     parser = argparse.ArgumentParser(description="Script flexible pour entraîner un modèle avec ou sans GradCAM")
@@ -98,11 +108,18 @@ def main():
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--mask_type", type=str, default="center", choices=["center","gaussian","random","edge"])
-    parser.add_argument("--use_cam_loss", type=bool, default=True)
+    
+    # parser.add_argument("--use_cam_loss", type=bool, default=True)
+    parser.add_argument("--use_cam_loss", type=str2bool, nargs='?', const=True, default=False,
+                    help="Activer ou désactiver la CAM loss (True/False)")
     parser.add_argument("--gradcam_loss_weight", type=float, default=1.0)
     parser.add_argument("--save_dir", type=str, default="./logs")
-    
+
     args = parser.parse_args()
+
+    #Affichage du mode sélectionné
+    mode = "⚙️Entraînement supervisé par Grad-CAM" if args.use_cam_loss else "⚙️ Entraînement baseline (sans Grad-CAM)"
+    print(f"\n===== MODE ACTIF : {mode} =====\n")
 
     #Dataset
     train_loader, val_loader, num_classes = get_dataloader(args.dataset, args.batch_size)
@@ -121,7 +138,7 @@ def main():
     model = get_model(args.model, num_classes)
 
     #GradCAM Module
-    gradcam_module = DifferentiableGradCAM().cuda() if args.use_cam_loss else None
+    gradcam_module = DifferentiableGradCAM().cuda()
 
     #Optimiseur et perte
     optimizer = get_optimizer(args.optimizer, model.parameters(), args.lr)

@@ -518,7 +518,6 @@ class Trainer:
         print(f"✅ Poids du modèle sauvegardés dans : {state_dict_path}")
 
 
-    @staticmethod
     def save_list_as_json(self, data_list, filename="metrics_history.json"):
         """
         Sauvegarde une liste de dictionnaires (par ex. historique des métriques)
@@ -537,6 +536,7 @@ class Trainer:
         # Construire le dossier cible
         model_dir = os.path.join('./logs/supervision_fixe/metrics', dataset_name, mode, self.mask_type)
         os.makedirs(model_dir, exist_ok=True)
+        
 
         # Construit le chemin complet
         file_path = os.path.join(model_dir, filename)
