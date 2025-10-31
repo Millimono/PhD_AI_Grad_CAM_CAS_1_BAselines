@@ -124,7 +124,17 @@ class Trainer:
 
             # 🎯 Génère une CAM target adaptative
             # center_mask = self.generate_center_mask(cam.shape, images.device)
-            mask_a_priori = self.mask_generator.generate(cam.shape, self.mask_type)
+
+            extra_args = {}
+            if self.mask_type == "diffuse":
+                extra_args["cam"] = cam
+            elif self.mask_type == "latent":
+                extra_args["latent_mask"] = self.latent_mask
+
+            mask_a_priori = self.mask_generator.generate(cam.shape, self.mask_type, **extra_args)
+
+
+            # mask_a_priori = self.mask_generator.generate(cam.shape, self.mask_type)
 
             if len(self.cam_history) > 0:
                 adaptive_target = self.update_adaptive_target(cam.device, cam.shape)
