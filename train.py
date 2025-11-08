@@ -34,6 +34,12 @@ def get_dataloader(dataset_name, batch_size):
         train_dataset = datasets.ImageFolder(root="./chestxray/train", transform=transform)
         val_dataset = datasets.ImageFolder(root="./chestxray/val", transform=transform)
         num_classes = len(train_dataset.classes)
+    elif dataset_name.lower() == "miniddsm":
+        # Structure attendue :
+        # data/miniddsm/train/Left_CC/*.png, Left_MLO/*.png, Right_CC/*.png, Right_MLO/*.png
+        train_dataset = datasets.ImageFolder(root="./miniddsm/train", transform=transform)
+        val_dataset = datasets.ImageFolder(root="./miniddsm/val", transform=transform)
+        num_classes = len(train_dataset.classes)  # typiquement 3 : Benign, Cancer, Normal
     else:
         raise ValueError(f"Dataset {dataset_name} non reconnu")
 

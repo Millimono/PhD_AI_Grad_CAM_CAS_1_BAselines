@@ -4,6 +4,32 @@ from torch.utils.data import DataLoader
 import os
 from torchvision.datasets.folder import ImageFolder
 
+"""
+dataset_root/
+├── train/
+│   ├── classA/
+│   │   ├── img1.png
+│   │   ├── img2.png
+│   └── classB/
+│       ├── img3.png
+│       ├── img4.png
+├── val/
+│   ├── classA/
+│   └── classB/
+|
+---------------------------------Db order ---------------------------------
+| Niveau | Dataset    | Pourquoi                  |
+| ------ | ---------- | ------------------------- |
+| ⭐      | CIFAR-10   | baseline                  |
+| ⭐⭐     | CIFAR-100  | + classes = + difficile   |
+| ⭐⭐     | imagenette | plus proche de ImageNet   |
+| ⭐⭐⭐    | FER2013    | visages + classes émotion |
+| ⭐⭐⭐    | ChestXRay  | médical                   |
+| ⭐⭐⭐⭐   | ISIC       | médical + difficile       |
+| ⭐⭐⭐⭐   | MVTec      | anomaly detection         |
+| ⭐⭐⭐⭐    |Breast mammography | Cancer du sein     |
+"""
+
 def load_dataset(name, train=True, data_dir="data", image_size=224, batch_size=32):
     """
     Charge dynamiquement un dataset parmi : cifar10, isic, mvtec, fer2013
