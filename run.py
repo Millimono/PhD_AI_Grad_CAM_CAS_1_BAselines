@@ -14,7 +14,9 @@ sys.argv = [
     "--optimizer", "adam",
     "--lr", "1e-4",
     "--gradcam_loss_weight", "1.0",
-    "--save_dir", "./logs"
+    "--save_dir", "./logs",
+    "--use_adaptive_supervision", "False",
+
 ]
 
 if __name__ == "__main__":

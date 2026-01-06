@@ -11,7 +11,8 @@ import cv2
 class Trainer:
     def __init__(self, model, gradcam_module, optimizer, dataloader, criterion, 
                  gradcam_loss_weight=1.0, use_cam_loss=True,
-                   fixed_images=None, fixed_labels=None,mask_type="center", mask_generator=None):
+                   fixed_images=None, fixed_labels=None,mask_type="center", mask_generator=None,
+                   use_adaptive_supervision=False, total_epochs=20):
         
         self.use_cam_loss = use_cam_loss
         self.model = model
@@ -35,6 +36,8 @@ class Trainer:
 
         self.fixed_images = fixed_images
         self.fixed_labels = fixed_labels
+        self.use_adaptive_supervision = use_adaptive_supervision  # ou False si supervision fixe
+        self.total_epochs = total_epochs  # passé depuis main()
 
         #self.set_fixed_images(self.dataloader, num_images=5)  # Pour visualiser un batch fixe
 
@@ -146,14 +149,28 @@ class Trainer:
             if self.use_cam_loss:
                     loss_cam = self.grad_cam.gradcam_loss(cam, target_mask)
                     # loss_cam = F.mse_loss(cam, target_mask)
-                    total_loss_batch = loss_class + self.gradcam_loss_weight * loss_cam
 
-                     # Sauvegarde périodique pour analyse scientifique
-                    if self.current_epoch % 5 == 0 and batch_idx == 0:  # uniquement 1er batch pour pas saturer le disque
-                        dataset_name = getattr(self.dataloader.dataset, 'name', 'dataset_unknown')
-                        mode = "cam_supervised" if self.use_cam_loss else "baseline"
+                    if self.use_adaptive_supervision:
+                        # Supervision adaptative : alpha_t croît avec l'époque
+                        alpha_min = 0.1
+                        alpha_max = self.gradcam_loss_weight
+                        progress = min(1.0, self.current_epoch / self.total_epochs)
+                        alpha_t = alpha_min + (alpha_max - alpha_min) * progress
+                        total_loss_batch = loss_class + alpha_t * loss_cam
 
-                        self.save_cam_analysis(
+                    else :    
+                        total_loss_batch = loss_class + self.gradcam_loss_weight * loss_cam
+
+
+            else:
+                total_loss_batch = loss_class
+            
+            # Sauvegarde périodique pour analyse scientifique
+            if self.current_epoch % 5 == 0 and batch_idx == 0:  # uniquement 1er batch pour pas saturer le disque
+                dataset_name = getattr(self.dataloader.dataset, 'name', 'dataset_unknown')
+                mode = "cam_supervised" if self.use_cam_loss else "baseline"
+
+                self.save_cam_analysis(
                             cam=cam.detach(),
                             cam_pre_relu=cam_pre_relu.detach(),
                             weights=weights.detach(),
@@ -161,9 +178,6 @@ class Trainer:
                             epoch=self.current_epoch,
                             layer_name="layer4"
                         )
-
-            else:
-                total_loss_batch = loss_class
             
             # 🔥 Ajoute la perte de reconstruction si nécessaire
             total_loss_batch.backward()

@@ -9,6 +9,9 @@ from differentiable_gradcam import DifferentiableGradCAM
 from MaskGenerator import MaskGenerator
 from Model import FullModel  # Remplace par le chemin réel
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+import os
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
 
 
 def get_dataloader(dataset_name, batch_size):
@@ -118,13 +121,30 @@ def main():
     # parser.add_argument("--use_cam_loss", type=bool, default=True)
     parser.add_argument("--use_cam_loss", type=str2bool, nargs='?', const=True, default=False,
                     help="Activer ou désactiver la CAM loss (True/False)")
+    parser.add_argument("--use_adaptive_supervision",type=str2bool,nargs='?',const=True,
+        default=False,help="Activer la supervision Grad-CAM adaptative (alpha_t variable)"
+    )
+
     parser.add_argument("--gradcam_loss_weight", type=float, default=1.0)
     parser.add_argument("--save_dir", type=str, default="./logs")
 
     args = parser.parse_args()
 
+    # 🔒 Sécurité logique : supervision adaptative ⇒ CAM active
+    if args.use_adaptive_supervision and not args.use_cam_loss:
+        raise ValueError(
+            "use_adaptive_supervision=True nécessite use_cam_loss=True"
+        )
+
     #Affichage du mode sélectionné
-    mode = "⚙️Entraînement supervisé par Grad-CAM" if args.use_cam_loss else "⚙️ Entraînement baseline (sans Grad-CAM)"
+    if args.use_cam_loss and args.use_adaptive_supervision:
+        mode = f"⚙️ Grad-CAM supervision ADAPTATIVE avec {args.dataset} {args.mask_type}"
+    elif args.use_cam_loss:
+        mode = f"⚙️ Grad-CAM supervision FIXE avec {args.dataset} {args.mask_type}"
+    else:
+        mode = f"⚙️ Entraînement baseline (sans Grad-CAM) avec {args.dataset} {args.mask_type}"
+
+    # mode = f"⚙️ Entraînement supervisé par Grad-CAM avec {args.dataset} {args.mask_type}" if args.use_cam_loss else "⚙️ Entraînement baseline (sans Grad-CAM)"
     print(f"\n===== MODE ACTIF : {mode} =====\n")
 
     #Dataset
@@ -134,6 +154,15 @@ def main():
     torch.manual_seed(42)
     fixed_images, fixed_labels = next(iter(train_loader))
     fixed_images, fixed_labels = fixed_images.cuda(), fixed_labels.cuda()
+
+    save_dir = "fixed_data"
+    os.makedirs(save_dir, exist_ok=True)
+
+    torch.save(fixed_images.cpu(), os.path.join(save_dir, "fixed_images.pt"))
+    torch.save(fixed_labels.cpu(), os.path.join(save_dir, "fixed_labels.pt"))
+
+    print(f"✅ Premier batch sauvegardé dans {save_dir}")
+
 
 
     #Ajouter l'attribut name pour le Trainer
@@ -165,7 +194,10 @@ def main():
         mask_type=args.mask_type,
         mask_generator=mask_gen,
         fixed_images=fixed_images,
-        fixed_labels=fixed_labels  
+        fixed_labels=fixed_labels,
+        use_adaptive_supervision=args.use_adaptive_supervision,
+        total_epochs=args.epochs,
+ 
     )
 
 #--------------------------------------Entraînement ----------------------------------------------------------
