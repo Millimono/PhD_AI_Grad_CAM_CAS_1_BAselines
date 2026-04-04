@@ -116,7 +116,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--lr", type=float, default=0.001)
-    parser.add_argument("--mask_type", type=str, default="center", choices=["center","circle","border","diffuse","latent"])
+    parser.add_argument("--mask_type", type=str, default="center", choices=["center","circle","border","diffuse","latent","ellipse","tissue"])
     
     # parser.add_argument("--use_cam_loss", type=bool, default=True)
     parser.add_argument("--use_cam_loss", type=str2bool, nargs='?', const=True, default=False,
