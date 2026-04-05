@@ -188,7 +188,13 @@ class MaskGenerator:
  
             masks.append(smoothed)
  
-        mask = torch.stack(masks, dim=0)                # (B, 1, H, W)
+        #mask = torch.stack(masks, dim=0)                # (B, 1, H, W)
+        #return mask
+    
+        # APRÈS
+        mask = torch.stack(masks, dim=0)
+        mask = F.interpolate(mask, size=(shape[2], shape[3]),
+                            mode='bilinear', align_corners=False)
         return mask
  
     # ------------------------------------------------------------------ #
