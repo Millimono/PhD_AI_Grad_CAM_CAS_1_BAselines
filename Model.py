@@ -64,6 +64,9 @@ class FullModel(nn.Module):
 
     def forward(self, x):
         features = self.feature_extractor(x)
+        # features.retain_grad()  # ← AJOUT : permet à Grad-CAM de calculer les gradients
+        features = features.detach().requires_grad_(True)  # ← remplace retain_grad()
+
         logits = self.classifier(features)
         return logits, features
 
