@@ -51,27 +51,27 @@ def get_dataloader(dataset_name, batch_size):
     
     return train_loader, val_loader, num_classes
 
-# def get_model(model_name, num_classes):
-#     model_name = model_name.lower()
-#     if model_name in ["resnet18", "resnet50", "vgg16", "densenet121", "efficientnet_b0"]:
-#         model = FullModel(num_classes=num_classes, backbone_name=model_name, pretrained=True)
-#     else:
-#         raise ValueError(f"Modèle {model_name} non reconnu")
-#     return model.cuda()
-
 def get_model(model_name, num_classes):
     model_name = model_name.lower()
     if model_name in ["resnet18", "resnet50", "vgg16", "densenet121", "efficientnet_b0"]:
         model = FullModel(num_classes=num_classes, backbone_name=model_name, pretrained=True)
     else:
         raise ValueError(f"Modèle {model_name} non reconnu")
-    
-    # ← AJOUT : geler le backbone, entraîner seulement la tête
-    for name, param in model.named_parameters():
-        if "fc" not in name and "classifier" not in name:
-            param.requires_grad = False
-
     return model.cuda()
+
+# def get_model(model_name, num_classes):
+#     model_name = model_name.lower()
+#     if model_name in ["resnet18", "resnet50", "vgg16", "densenet121", "efficientnet_b0"]:
+#         model = FullModel(num_classes=num_classes, backbone_name=model_name, pretrained=True)
+#     else:
+#         raise ValueError(f"Modèle {model_name} non reconnu")
+    
+#     # ← AJOUT : geler le backbone, entraîner seulement la tête
+#     for name, param in model.named_parameters():
+#         if "fc" not in name and "classifier" not in name:
+#             param.requires_grad = False
+
+#     return model.cuda()
 
 
 
