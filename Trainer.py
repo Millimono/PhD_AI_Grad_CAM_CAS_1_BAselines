@@ -134,7 +134,8 @@ class Trainer:
             elif self.mask_type == "latent":
                 extra_args["latent_mask"] = self.latent_mask
             elif self.mask_type == "tissue":
-                extra_args["image"] = images    
+                extra_args["image"] = images 
+               
 
             mask_a_priori = self.mask_generator.generate(cam.shape, self.mask_type, **extra_args)
 

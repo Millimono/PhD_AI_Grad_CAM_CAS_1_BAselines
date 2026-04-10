@@ -37,6 +37,25 @@ class MaskGenerator:
             if image is None:
                 raise ValueError("Pour 'tissue', il faut passer image=<tensor>")
             return self.tissue_mask(image, shape, **kwargs)
+        
+        elif mask_type == "gaussian_anisotropic":
+            return self.gaussian_anisotropic_mask(shape, **kwargs)
+        
+        elif mask_type == "gaussian_mixture":
+            return self.gaussian_mixture_mask(shape, **kwargs)
+
+        elif mask_type == "radial":
+            return self.radial_mask(shape, **kwargs)
+
+        elif mask_type == "directional":
+            return self.directional_mask(shape, **kwargs)
+
+        elif mask_type == "sigmoid":
+            return self.sigmoid_mask(shape, **kwargs)
+
+        elif mask_type == "ring":
+            return self.ring_mask(shape, **kwargs)
+
 
         else:
             raise ValueError(f"Masque inconnu: {mask_type}")
@@ -197,8 +216,111 @@ class MaskGenerator:
                             mode='bilinear', align_corners=False)
         return mask
  
+    def gaussian_anisotropic_mask(self, shape, cx=0.0, cy=0.0,sigma_x=0.5, sigma_y=0.8,rho=0.0):
+            B, C, H, W = shape
+
+            y = torch.linspace(-1, 1, H, device=self.device)
+            x = torch.linspace(-1, 1, W, device=self.device)
+            yy, xx = torch.meshgrid(y, x, indexing="ij")
+
+            # vecteur centré
+            x_c = xx - cx
+            y_c = yy - cy
+
+            # matrice covariance
+            Sigma = torch.tensor([
+                [sigma_x**2, rho * sigma_x * sigma_y],
+                [rho * sigma_x * sigma_y, sigma_y**2]
+            ], device=self.device)
+
+            Sigma_inv = torch.inverse(Sigma)
+
+            # forme quadratique
+            quad = (Sigma_inv[0,0] * x_c**2 +
+                    2 * Sigma_inv[0,1] * x_c * y_c +
+                    Sigma_inv[1,1] * y_c**2)
+
+            mask = torch.exp(-quad)
+
+            # normalisation
+            mask = (mask - mask.min()) / (mask.max() - mask.min() + 1e-8)
+
+            return mask.unsqueeze(0).unsqueeze(0).expand(B,1,H,W)
+
+
+    def gaussian_mixture_mask(self, shape, centers=[(-0.3,0),(0.3,0)], sigma=0.4):
+        B, C, H, W = shape
+        y = torch.linspace(-1, 1, H, device=self.device)
+        x = torch.linspace(-1, 1, W, device=self.device)
+        yy, xx = torch.meshgrid(y, x, indexing="ij")
+
+        mask = 0
+        for cx, cy in centers:
+            dist2 = (xx - cx)**2 + (yy - cy)**2
+            mask += torch.exp(-dist2 / (2 * sigma**2))
+
+        mask = mask / mask.max()
+        return mask.unsqueeze(0).unsqueeze(0).expand(B,1,H,W)
+
+
+    def radial_mask(self, shape, lam=2.0):
+        B, C, H, W = shape
+        y = torch.linspace(-1, 1, H, device=self.device)
+        x = torch.linspace(-1, 1, W, device=self.device)
+        yy, xx = torch.meshgrid(y, x, indexing="ij")
+
+        dist = torch.sqrt(xx**2 + yy**2)
+        mask = torch.exp(-lam * dist)
+
+        return mask.unsqueeze(0).unsqueeze(0).expand(B,1,H,W)
+
+
+    def polynomial_mask(self, shape, p=2):
+        B, C, H, W = shape
+        y = torch.linspace(-1, 1, H, device=self.device)
+        x = torch.linspace(-1, 1, W, device=self.device)
+        yy, xx = torch.meshgrid(y, x, indexing="ij")
+
+        mask = 1 - (xx**2 + yy**2)**p
+        mask = torch.clamp(mask, 0, 1)
+
+        return mask.unsqueeze(0).unsqueeze(0).expand(B,1,H,W)
+
+    def directional_mask(self, shape, alpha=2.0):
+        B, C, H, W = shape
+        x = torch.linspace(-1, 1, W, device=self.device)
+        mask = torch.exp(-alpha * x).unsqueeze(0).expand(H, W)
+
+        return mask.unsqueeze(0).unsqueeze(0).expand(B,1,H,W)
+
+    def sigmoid_mask(self, shape, k=10, x0=0.0):
+        B, C, H, W = shape
+        x = torch.linspace(-1, 1, W, device=self.device)
+        mask = 1 / (1 + torch.exp(-k * (x - x0)))
+        mask = mask.unsqueeze(0).expand(H, W)
+
+        return mask.unsqueeze(0).unsqueeze(0).expand(B,1,H,W)
+
+    def ring_mask(self, shape, r0=0.5, sigma=0.1):
+        B, C, H, W = shape
+        y = torch.linspace(-1, 1, H, device=self.device)
+        x = torch.linspace(-1, 1, W, device=self.device)
+        yy, xx = torch.meshgrid(y, x, indexing="ij")
+
+        r = torch.sqrt(xx**2 + yy**2)
+        mask = torch.exp(-((r - r0)**2) / (2 * sigma**2))
+
+        return mask.unsqueeze(0).unsqueeze(0).expand(B,1,H,W)
+
+
     # ------------------------------------------------------------------ #
     #  Helpers privés                                                      #
+    #Les 3 à tester ABSOLUMENT :
+
+        # gaussian_anisotropic (ton principal)
+        # gaussian_mixture (très puissant)
+        # directional_mask (spécifique mammographie)
+        # “Impact of Analytical Spatial Priors on Weakly Supervised Localization in Mammography”
     # ------------------------------------------------------------------ #
  
     @staticmethod
