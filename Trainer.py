@@ -163,6 +163,8 @@ class Trainer:
 
                     else :    
                         total_loss_batch = loss_class + self.gradcam_loss_weight * loss_cam
+                    
+                    print(f"loss_class={loss_class.item():.4f}, loss_cam={loss_cam.item():.4f}")
 
 
             else:

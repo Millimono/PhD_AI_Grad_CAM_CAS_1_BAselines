@@ -8,7 +8,7 @@ sys.argv = [
     "--dataset", "cifar10",
     "--model", "resnet18",
     "--mask_type", "center",
-    "--use_cam_loss", "False",
+    "--use_cam_loss", "True",
     "--batch_size", "32",
     "--epochs", "20",
     "--optimizer", "adam",

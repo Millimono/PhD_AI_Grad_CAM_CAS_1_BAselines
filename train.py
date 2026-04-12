@@ -40,9 +40,13 @@ def get_dataloader(dataset_name, batch_size):
     elif dataset_name.lower() == "miniddsm":
         # Structure attendue :
         # data/miniddsm/train/Left_CC/*.png, Left_MLO/*.png, Right_CC/*.png, Right_MLO/*.png
-        train_dataset = datasets.ImageFolder(root="./miniddsm/train", transform=transform)
-        val_dataset = datasets.ImageFolder(root="./miniddsm/val", transform=transform)
-        num_classes = len(train_dataset.classes)  # typiquement 3 : Benign, Cancer, Normal
+        # train_dataset = datasets.ImageFolder(root="./miniddsm/train", transform=transform)
+        # val_dataset = datasets.ImageFolder(root="./miniddsm/val", transform=transform)
+
+        train_dataset = datasets.ImageFolder(root="./miniddsm_binary/train", transform=transform)
+        val_dataset = datasets.ImageFolder(root="./miniddsm_binary/val", transform=transform)
+        num_classes = len(train_dataset.classes)  # typiquement 3 : Benign, Cancer, Normal # devrait être 2 pour miniddsm_binary
+        
     else:
         raise ValueError(f"Dataset {dataset_name} non reconnu")
 
