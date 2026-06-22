@@ -1,0 +1,27 @@
+# MiniDDSM — best classification configuration of the paper.
+# MBorder prior with fixed supervision => +1.23 accuracy points vs baseline.
+# Hyperparameters mirror the values used in the published run (lr=1e-5, lambda=0.1).
+name: miniddsm_border_fixed
+description: ResNet-18, MiniDDSM, MBorder prior with fixed CAM supervision.
+
+data:
+  dataset:    miniddsm
+  batch_size: 32
+
+model:
+  model: resnet18
+
+train:
+  epochs:    50
+  optimizer: adam
+  criterion: crossentropy
+  lr:        0.00001     # 1e-5, gentle fine-tuning for medical images
+
+supervision:
+  use_cam_loss:             true
+  use_adaptive_supervision: false
+  mask_type:                border
+  gradcam_loss_weight:      0.1    # less aggressive CAM loss for fine-tuning
+
+output:
+  save_dir: ./logs

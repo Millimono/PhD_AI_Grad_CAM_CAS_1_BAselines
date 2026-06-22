@@ -1,0 +1,14 @@
+# Default evaluation configuration for CIFAR-10.
+# Reproduces the paper's headline number (comprehensiveness ~ 0.83):
+#   baseline = black, threshold = 0.5, steps = 50.
+name: eval_cifar10_default
+description: Faithfulness evaluation of a CIFAR-10 checkpoint with the paper's protocol.
+
+checkpoint:  logs/supervision_fixe/models/cifar10/cam_supervised/circle/best_model.pt
+dataset:     cifar10
+batch_size:  32
+steps:       50
+threshold:   0.5
+eraser_bins: false       # set to true to use the ERASER {1,5,10,20,50}% bins
+baseline:    black       # "black" (paper) or "blur" (RISE-standard)
+out:         logs/explainability

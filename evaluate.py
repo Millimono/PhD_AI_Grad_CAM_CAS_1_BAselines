@@ -1,28 +1,110 @@
 """
 evaluate.py
 -----------
-Load a trained model and compute the four faithfulness metrics on its
-validation set, reusing your existing data pipeline (train.get_dataloader)
-and Grad-CAM module.
+Compute the four faithfulness metrics (deletion / insertion /
+comprehensiveness / sufficiency) on a trained checkpoint.
 
-Example
--------
-    python evaluate.py \
-        --checkpoint logs/supervision_fixe/models/cifar10/cam_supervised/circle/best_model.pt \
-        --dataset cifar10 --batch_size 32 --steps 50 --threshold 0.5 \
-        --baseline black --out logs/explainability
+Three usage modes:
+    (A) Legacy CLI flags — exactly as before:
+        python evaluate.py --checkpoint best_model.pt --dataset cifar10 --steps 50
+
+    (B) YAML config:
+        python evaluate.py --config configs/eval_cifar10.yaml
+
+    (C) YAML + CLI override:
+        python evaluate.py --config configs/eval_cifar10.yaml --max_batches 5
+
+Evaluation YAMLs accept the following keys (flat or grouped):
+    checkpoint, dataset, batch_size, steps, threshold, eraser_bins,
+    baseline, out, max_batches
 """
 import argparse
 import json
 import os
+import sys
+from pathlib import Path
+from typing import Any, Dict
 
 import torch
 
 from differentiable_gradcam import DifferentiableGradCAM
 from explainability import compute_metrics_on_loader
-
-# Reuse the EXACT dataset logic used during training (no duplication).
 from train import get_dataloader
+
+
+EVAL_DEFAULTS: Dict[str, Any] = {
+    "checkpoint":  None,           # required
+    "dataset":     "cifar10",
+    "batch_size":  32,
+    "steps":       50,
+    "threshold":   0.5,
+    "eraser_bins": False,
+    "baseline":    "black",        # "black" | "blur"
+    "out":         "logs/explainability",
+    "max_batches": None,
+}
+
+
+def _str2bool(v: Any) -> bool:
+    if isinstance(v, bool):
+        return v
+    s = str(v).strip().lower()
+    if s in ("yes", "true", "t", "1", "y"):
+        return True
+    if s in ("no", "false", "f", "0", "n"):
+        return False
+    raise argparse.ArgumentTypeError(f"Boolean value expected, got {v!r}.")
+
+
+def _load_yaml(path: str) -> Dict[str, Any]:
+    try:
+        import yaml
+    except ImportError as e:
+        raise ImportError("PyYAML required for --config. pip install pyyaml") from e
+    p = Path(path)
+    if not p.is_file():
+        raise FileNotFoundError(f"Config file not found: {path}")
+    raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    flat: Dict[str, Any] = {}
+    for k, v in raw.items():
+        if isinstance(v, dict):
+            flat.update(v)
+        else:
+            flat[k] = v
+    flat.pop("name", None); flat.pop("description", None)
+    unknown = set(flat) - set(EVAL_DEFAULTS)
+    if unknown:
+        raise ValueError(f"Unknown keys in {path}: {sorted(unknown)}.")
+    return flat
+
+
+def get_eval_config() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Faithfulness evaluation of Grad-CAM maps.")
+    p.add_argument("--config", type=str, default=None)
+    S = argparse.SUPPRESS
+    p.add_argument("--checkpoint",  type=str,   default=S)
+    p.add_argument("--dataset",     type=str,   default=S)
+    p.add_argument("--batch_size",  type=int,   default=S)
+    p.add_argument("--steps",       type=int,   default=S)
+    p.add_argument("--threshold",   type=float, default=S,
+                   help="rationale fraction for comprehensiveness/sufficiency")
+    p.add_argument("--eraser_bins", type=_str2bool, nargs="?", const=True, default=S,
+                   help="aggregate comp/suff over {0.01,0.05,0.1,0.2,0.5}")
+    p.add_argument("--baseline",    choices=["black", "blur"], default=S)
+    p.add_argument("--out",         type=str,   default=S)
+    p.add_argument("--max_batches", type=int,   default=S,
+                   help="evaluate only the first N batches (quick check)")
+    cli = vars(p.parse_args())
+
+    cfg = dict(EVAL_DEFAULTS)
+    config_path = cli.pop("config", None)
+    if config_path:
+        cfg.update(_load_yaml(config_path))
+    cfg.update(cli)
+
+    if cfg["checkpoint"] is None:
+        p.error("--checkpoint is required (either via CLI or YAML)")
+    return argparse.Namespace(**cfg)
 
 
 def load_full_model(path, device):
@@ -33,21 +115,7 @@ def load_full_model(path, device):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Faithfulness evaluation of Grad-CAM maps")
-    p.add_argument("--checkpoint", required=True, help="path to best_model.pt (full model)")
-    p.add_argument("--dataset", default="cifar10")
-    p.add_argument("--batch_size", type=int, default=32)
-    p.add_argument("--steps", type=int, default=50, help="deletion/insertion granularity")
-    p.add_argument("--threshold", type=float, default=0.5,
-                   help="rationale fraction for comprehensiveness/sufficiency")
-    p.add_argument("--eraser_bins", action="store_true",
-                   help="aggregate comp/suff over the standard {0.01,0.05,0.1,0.2,0.5} bins")
-    p.add_argument("--baseline", choices=["black", "blur"], default="black")
-    p.add_argument("--out", default="logs/explainability")
-    p.add_argument("--max_batches", type=int, default=None,
-                   help="evaluate only the first N batches (quick check)")
-    args = p.parse_args()
-
+    args = get_eval_config()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     _, val_loader, _ = get_dataloader(args.dataset, args.batch_size)
@@ -63,7 +131,6 @@ def main():
 
     model = load_full_model(args.checkpoint, device)
     gradcam = DifferentiableGradCAM().to(device)
-
     keep = (0.01, 0.05, 0.1, 0.2, 0.5) if args.eraser_bins else (args.threshold,)
 
     os.makedirs(args.out, exist_ok=True)
@@ -74,8 +141,9 @@ def main():
         csv_path=os.path.join(args.out, f"per_image_{tag}.csv"),
     )
 
+    summary = {"config": vars(args), "n_images": len(records), "means": means}
     with open(os.path.join(args.out, f"summary_{tag}.json"), "w") as f:
-        json.dump({"config": vars(args), "n_images": len(records), "means": means}, f, indent=4)
+        json.dump(summary, f, indent=4)
 
     print("\n===== Faithfulness metrics =====")
     print(f"Deletion AUC        : {means['deletion']:.4f}   (lower is better)")

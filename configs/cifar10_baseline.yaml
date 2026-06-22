@@ -1,0 +1,26 @@
+# CIFAR-10 baseline — no attention supervision.
+# This is the reference run against which CAM-supervised configs are compared.
+name: cifar10_baseline
+description: ResNet-18 trained on CIFAR-10 without Grad-CAM supervision (baseline).
+
+data:
+  dataset:    cifar10
+  batch_size: 32
+
+model:
+  model: resnet18
+
+train:
+  epochs:    20
+  optimizer: adam
+  criterion: crossentropy
+  lr:        0.001
+
+supervision:
+  use_cam_loss:             false   # baseline => attention is NOT supervised
+  use_adaptive_supervision: false
+  mask_type:                center  # ignored when use_cam_loss is false (kept for API consistency)
+  gradcam_loss_weight:      1.0
+
+output:
+  save_dir: ./logs

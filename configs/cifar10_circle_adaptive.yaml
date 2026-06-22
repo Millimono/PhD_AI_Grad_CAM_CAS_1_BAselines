@@ -1,0 +1,26 @@
+# CIFAR-10 — best explainability configuration of the paper.
+# MCircle prior + adaptive (dynamic) supervision => comprehensiveness ~ 0.83.
+name: cifar10_circle_adaptive
+description: ResNet-18, CIFAR-10, MCircle prior with adaptive CAM supervision.
+
+data:
+  dataset:    cifar10
+  batch_size: 32
+
+model:
+  model: resnet18
+
+train:
+  epochs:    20
+  optimizer: adam
+  criterion: crossentropy
+  lr:        0.001
+
+supervision:
+  use_cam_loss:             true
+  use_adaptive_supervision: true    # alpha_t grows with the epoch
+  mask_type:                circle
+  gradcam_loss_weight:      1.0     # acts as alpha_max in adaptive mode
+
+output:
+  save_dir: ./logs
