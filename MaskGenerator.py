@@ -55,7 +55,8 @@ class MaskGenerator:
 
         elif mask_type == "ring":
             return self.ring_mask(shape, **kwargs)
-
+        elif mask_type == "multi_circle":
+            return self.multi_circle_mask(shape, **kwargs)
 
         else:
             raise ValueError(f"Masque inconnu: {mask_type}")
@@ -322,7 +323,28 @@ class MaskGenerator:
         # directional_mask (spécifique mammographie)
         # “Impact of Analytical Spatial Priors on Weakly Supervised Localization in Mammography”
     # ------------------------------------------------------------------ #
- 
+
+    def multi_circle_mask(self, shape, centers=None, radius=0.15):
+        B, C, H, W = shape
+        
+        if centers is None:
+            centers = [(-0.5, -0.5),  # haut-gauche
+                    ( 0.5, -0.5),  # haut-droite
+                    (-0.5,  0.5),  # bas-gauche
+                    ( 0.5,  0.5)]  # bas-droite
+        
+        y = torch.linspace(-1, 1, H, device=self.device)
+        x = torch.linspace(-1, 1, W, device=self.device)
+        yy, xx = torch.meshgrid(y, x, indexing="ij")
+        
+        mask = torch.zeros(H, W, device=self.device)
+        
+        for cx, cy in centers:
+            dist = torch.sqrt((xx - cx)**2 + (yy - cy)**2)
+            mask = torch.maximum(mask, (dist <= radius).float())
+        
+        return mask.unsqueeze(0).unsqueeze(0).expand(B, 1, H, W)
+
     @staticmethod
     def _otsu_threshold(img: torch.Tensor, n_bins: int = 256) -> float:
         """

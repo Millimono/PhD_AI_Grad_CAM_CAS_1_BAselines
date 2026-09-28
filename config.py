@@ -47,7 +47,7 @@ DEFAULTS: Dict[str, Any] = {
 VALID_MASKS = [
     "center", "circle", "border", "diffuse", "latent", "ellipse", "tissue",
     "gaussian_anisotropic", "gaussian_mixture", "radial", "directional",
-    "sigmoid", "ring",
+    "sigmoid", "ring", "multi_circle",
 ]
 
 
