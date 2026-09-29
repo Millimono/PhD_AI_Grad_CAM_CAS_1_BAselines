@@ -57,7 +57,8 @@ class MaskGenerator:
             return self.ring_mask(shape, **kwargs)
         elif mask_type == "multi_circle":
             return self.multi_circle_mask(shape, **kwargs)
-
+        elif mask_type == "border_multi_circle":
+            return self.border_multi_circle_mask(shape, **kwargs)
         else:
             raise ValueError(f"Masque inconnu: {mask_type}")
 
@@ -313,6 +314,36 @@ class MaskGenerator:
 
         return mask.unsqueeze(0).unsqueeze(0).expand(B,1,H,W)
 
+
+    def border_multi_circle_mask(self, shape, centers=None, radius=0.15, sigma=0.5):
+        """
+        Combinaison de MBorder (périphérique) et de petits cercles aux zones actives.
+        """
+        B, C, H, W = shape
+        
+        if centers is None:
+            centers = [(-0.5, -0.5),  # haut-gauche
+                    ( 0.5,  0.5)]  # bas-droite — zones actives MiniDDSM
+        
+        y = torch.linspace(-1, 1, H, device=self.device)
+        x = torch.linspace(-1, 1, W, device=self.device)
+        yy, xx = torch.meshgrid(y, x, indexing="ij")
+        
+        # Composante MBorder (1 - gaussienne centrale)
+        dist2 = xx**2 + yy**2
+        border = 1.0 - torch.exp(-dist2 / (2 * sigma**2))
+        
+        # Composante multi-cercles
+        circles = torch.zeros(H, W, device=self.device)
+        for cx, cy in centers:
+            dist = torch.sqrt((xx - cx)**2 + (yy - cy)**2)
+            circles = torch.maximum(circles, (dist <= radius).float())
+        
+        # Combinaison : max des deux
+        mask = torch.maximum(border, circles)
+        mask = (mask - mask.min()) / (mask.max() - mask.min() + 1e-8)
+        
+        return mask.unsqueeze(0).unsqueeze(0).expand(B, 1, H, W)
 
     # ------------------------------------------------------------------ #
     #  Helpers privés                                                      #
