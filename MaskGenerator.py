@@ -59,6 +59,8 @@ class MaskGenerator:
             return self.multi_circle_mask(shape, **kwargs)
         elif mask_type == "border_multi_circle":
             return self.border_multi_circle_mask(shape, **kwargs)
+        elif mask_type == "circle_with_wings":
+            return self.circle_with_wings_mask(shape, **kwargs)
         else:
             raise ValueError(f"Masque inconnu: {mask_type}")
 
@@ -342,6 +344,35 @@ class MaskGenerator:
         # Combinaison : max des deux
         mask = torch.maximum(border, circles)
         mask = (mask - mask.min()) / (mask.max() - mask.min() + 1e-8)
+        
+        return mask.unsqueeze(0).unsqueeze(0).expand(B, 1, H, W)
+
+
+    def circle_with_wings_mask(self, shape, radius=0.5, wing_width=0.3, wing_height=0.15):
+        """
+        Cercle central + extensions latérales (ailes).
+        Le cercle reste intact, les ailes s'étendent sur les côtés.
+        """
+        B, C, H, W = shape
+        
+        y = torch.linspace(-1, 1, H, device=self.device)
+        x = torch.linspace(-1, 1, W, device=self.device)
+        yy, xx = torch.meshgrid(y, x, indexing="ij")
+        
+        # Cercle central (identique à MCircle)
+        dist = torch.sqrt(xx**2 + yy**2)
+        circle = (dist <= radius).float()
+        
+        # Aile gauche
+        left_wing = ((xx >= -1.0) & (xx <= -radius) & 
+                    (yy.abs() <= wing_height)).float()
+        
+        # Aile droite
+        right_wing = ((xx >= radius) & (xx <= 1.0) & 
+                    (yy.abs() <= wing_height)).float()
+        
+        # Combinaison
+        mask = torch.maximum(circle, torch.maximum(left_wing, right_wing))
         
         return mask.unsqueeze(0).unsqueeze(0).expand(B, 1, H, W)
 
