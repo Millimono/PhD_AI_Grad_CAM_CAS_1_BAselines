@@ -61,6 +61,8 @@ class MaskGenerator:
             return self.border_multi_circle_mask(shape, **kwargs)
         elif mask_type == "circle_with_wings":
             return self.circle_with_wings_mask(shape, **kwargs)
+        elif mask_type == "breast_shape":
+            return self.breast_shape_mask(shape, **kwargs)
         else:
             raise ValueError(f"Masque inconnu: {mask_type}")
 
@@ -374,6 +376,36 @@ class MaskGenerator:
         # Combinaison
         mask = torch.maximum(circle, torch.maximum(left_wing, right_wing))
         
+        return mask.unsqueeze(0).unsqueeze(0).expand(B, 1, H, W)
+
+
+    def breast_shape_mask(self, shape, side="left", alpha=2.0, beta=1.5):
+        """
+        Prior anatomique en forme de sein — demi-ellipse asymétrique.
+        Inspiré de la vue CC ou MLO en mammographie.
+        side : "left" ou "right" selon le sein
+        """
+        B, C, H, W = shape
+        y = torch.linspace(-1, 1, H, device=self.device)
+        x = torch.linspace(-1, 1, W, device=self.device)
+        yy, xx = torch.meshgrid(y, x, indexing="ij")
+
+        if side == "left":
+            # Paroi thoracique à gauche, courbe à droite
+            # Masque nul pour x < -0.8 (paroi)
+            # Ellipse asymétrique centrée légèrement à gauche
+            r = ((xx + 0.3) / alpha)**2 + (yy / beta)**2
+        else:
+            r = ((xx - 0.3) / alpha)**2 + (yy / beta)**2
+
+        mask = torch.exp(-r)
+        # Coupe la partie thoracique
+        if side == "left":
+            mask = mask * (xx > -0.85).float()
+        else:
+            mask = mask * (xx < 0.85).float()
+
+        mask = (mask - mask.min()) / (mask.max() - mask.min() + 1e-8)
         return mask.unsqueeze(0).unsqueeze(0).expand(B, 1, H, W)
 
     # ------------------------------------------------------------------ #
