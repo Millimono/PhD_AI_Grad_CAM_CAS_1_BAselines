@@ -71,10 +71,43 @@ def get_dataloader(dataset_name, batch_size):
         train_dataset = datasets.ImageFolder(root="./chestxray/train", transform=transform)
         val_dataset = datasets.ImageFolder(root="./chestxray/val", transform=transform)
         num_classes = len(train_dataset.classes)
+    # elif name == "miniddsm":
+    #     train_dataset = datasets.ImageFolder(root="./miniddsm_binary/train", transform=transform)
+    #     val_dataset = datasets.ImageFolder(root="./miniddsm_binary/val", transform=transform)
+    #     num_classes = len(train_dataset.classes)
     elif name == "miniddsm":
-        train_dataset = datasets.ImageFolder(root="./miniddsm_binary/train", transform=transform)
-        val_dataset = datasets.ImageFolder(root="./miniddsm_binary/val", transform=transform)
-        num_classes = len(train_dataset.classes)
+            from PIL import Image
+            import numpy as np
+            from skimage.filters import threshold_otsu
+            
+            def otsu_preprocess(img):
+                gray = np.array(img.convert('L'))
+                try:
+                    thresh = threshold_otsu(gray)
+                    mask = gray > thresh
+                    result = gray * mask
+                except Exception:
+                    result = gray
+                return Image.fromarray(result).convert('RGB')
+            
+            transform_miniddsm = transforms.Compose([
+                transforms.Lambda(otsu_preprocess),
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                    std=[0.229, 0.224, 0.225])
+            ])
+            
+            train_dataset = datasets.ImageFolder(
+                root="./miniddsm_binary/train", 
+                transform=transform_miniddsm
+            )
+            val_dataset = datasets.ImageFolder(
+                root="./miniddsm_binary/val", 
+                transform=transform_miniddsm
+            )
+            num_classes = len(train_dataset.classes)
+
     else:
         raise ValueError(f"Dataset {dataset_name} non reconnu")
 
