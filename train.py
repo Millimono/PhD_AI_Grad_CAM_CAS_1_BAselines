@@ -67,10 +67,10 @@ def get_dataloader(dataset_name, batch_size):
         train_dataset = datasets.ImageFolder(root="./imagenette/train", transform=transform)
         val_dataset = datasets.ImageFolder(root="./imagenette/val", transform=transform)
         num_classes = len(train_dataset.classes)
-    elif name == "chestxray":
-        train_dataset = datasets.ImageFolder(root="./chestxray/train", transform=transform)
-        val_dataset = datasets.ImageFolder(root="./chestxray/val", transform=transform)
-        num_classes = len(train_dataset.classes)
+    # elif name == "chestxray":
+    #     train_dataset = datasets.ImageFolder(root="./chestxray/train", transform=transform)
+    #     val_dataset = datasets.ImageFolder(root="./chestxray/val", transform=transform)
+    #     num_classes = len(train_dataset.classes)
     # elif name == "miniddsm":
     #     train_dataset = datasets.ImageFolder(root="./miniddsm_binary/train", transform=transform)
     #     val_dataset = datasets.ImageFolder(root="./miniddsm_binary/val", transform=transform)
@@ -91,11 +91,14 @@ def get_dataloader(dataset_name, batch_size):
                                 std=[0.229, 0.224, 0.225])
         ])
         train_dataset = datasets.ImageFolder(
-            root="./chestxray/train", 
+            # root="./chestxray/train", 
+            root="./chest_xray/train",
             transform=transform_train_cxr
         )
         val_dataset = datasets.ImageFolder(
-            root="./chestxray/test",   # test comme val
+            # root="./chestxray/test",   # test comme val
+            root="./chest_xray/test",
+
             transform=transform_val_cxr
         )
         num_classes = len(train_dataset.classes)
