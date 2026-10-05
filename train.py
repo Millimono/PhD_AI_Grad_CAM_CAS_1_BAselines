@@ -77,7 +77,8 @@ def get_dataloader(dataset_name, batch_size):
     #     num_classes = len(train_dataset.classes)
     elif name == "chestxray":
         transform_train_cxr = transforms.Compose([
-            transforms.Resize((image_size, image_size)),
+            # transforms.Resize((image_size, image_size)),
+            transforms.Resize((224, 224)),
             transforms.RandomRotation(10),
             transforms.ColorJitter(brightness=0.2, contrast=0.2),
             transforms.ToTensor(),
@@ -85,7 +86,8 @@ def get_dataloader(dataset_name, batch_size):
                                 std=[0.229, 0.224, 0.225])
         ])
         transform_val_cxr = transforms.Compose([
-            transforms.Resize((image_size, image_size)),
+            # transforms.Resize((image_size, image_size)),
+            transforms.Resize((224, 224)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                 std=[0.229, 0.224, 0.225])

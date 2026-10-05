@@ -254,7 +254,7 @@ class MaskGenerator:
             return mask.unsqueeze(0).unsqueeze(0).expand(B,1,H,W)
 
 
-    def gaussian_mixture_mask(self, shape, centers=[(-0.3,0),(0.3,0)], sigma=0.4):
+    def gaussian_mixture_mask(self, shape, centers=[(-0.35, 0), (0.35, 0)], sigma=0.25):
         B, C, H, W = shape
         y = torch.linspace(-1, 1, H, device=self.device)
         x = torch.linspace(-1, 1, W, device=self.device)
