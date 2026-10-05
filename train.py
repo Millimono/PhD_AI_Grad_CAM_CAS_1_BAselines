@@ -75,6 +75,31 @@ def get_dataloader(dataset_name, batch_size):
     #     train_dataset = datasets.ImageFolder(root="./miniddsm_binary/train", transform=transform)
     #     val_dataset = datasets.ImageFolder(root="./miniddsm_binary/val", transform=transform)
     #     num_classes = len(train_dataset.classes)
+    elif name == "chestxray":
+        transform_train_cxr = transforms.Compose([
+            transforms.Resize((image_size, image_size)),
+            transforms.RandomRotation(10),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225])
+        ])
+        transform_val_cxr = transforms.Compose([
+            transforms.Resize((image_size, image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225])
+        ])
+        train_dataset = datasets.ImageFolder(
+            root="./chestxray/train", 
+            transform=transform_train_cxr
+        )
+        val_dataset = datasets.ImageFolder(
+            root="./chestxray/test",   # test comme val
+            transform=transform_val_cxr
+        )
+        num_classes = len(train_dataset.classes)
+
     elif name == "miniddsm":
             from PIL import Image
             import numpy as np
