@@ -42,6 +42,7 @@ DEFAULTS: Dict[str, Any] = {
     "gradcam_loss_weight":      1.0,
     "save_dir":                 "./logs",
     "seed":                     42,
+    "no_pretrain":              False
 }
 
 VALID_MASKS = [
@@ -139,6 +140,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--save_dir",                 type=str,   default=S)
     p.add_argument("--seed",                     type=int,   default=S,
                    help="Random seed. Default 42; expose only if you need it (e.g. multi-seed robustness).")
+    p.add_argument("--no_pretrain", action="store_true", default=S,
+                   help="Disable pretraining.")
     return p
 
 

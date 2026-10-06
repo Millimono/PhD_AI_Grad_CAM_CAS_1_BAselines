@@ -149,7 +149,10 @@ def get_dataloader(dataset_name, batch_size):
 def get_model(model_name, num_classes):
     name = model_name.lower()
     if name in ["resnet18", "resnet50", "vgg16", "densenet121", "efficientnet_b0"]:
-        model = FullModel(num_classes=num_classes, backbone_name=name, pretrained=True)
+
+        pretrained = not cfg.no_pretrain  # False si --no_pretrain passé
+        #model = FullModel(num_classes=num_classes, backbone_name=name, pretrained=True)
+        model = FullModel(num_classes=num_classes, backbone_name=name, pretrained=pretrained)
     else:
         raise ValueError(f"Modèle {model_name} non reconnu")
     return model.cuda()
