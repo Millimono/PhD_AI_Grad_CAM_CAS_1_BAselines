@@ -146,11 +146,11 @@ def get_dataloader(dataset_name, batch_size):
     return train_loader, val_loader, num_classes
 
 
-def get_model(model_name, num_classes):
+def get_model(model_name, num_classes, pretrained=True):
     name = model_name.lower()
     if name in ["resnet18", "resnet50", "vgg16", "densenet121", "efficientnet_b0"]:
 
-        pretrained = not cfg.no_pretrain  # False si --no_pretrain passé
+        # pretrained = not cfg.no_pretrain  # False si --no_pretrain passé
         #model = FullModel(num_classes=num_classes, backbone_name=name, pretrained=True)
         model = FullModel(num_classes=num_classes, backbone_name=name, pretrained=pretrained)
     else:
@@ -229,7 +229,8 @@ def main():
     val_loader.dataset.name = cfg.dataset.lower()
 
     # ----------------- Model & Trainer -----------------
-    model = get_model(cfg.model, num_classes)
+    # model = get_model(cfg.model, num_classes)
+    model = get_model(cfg.model, num_classes, pretrained=not cfg.no_pretrain)
     gradcam_module = DifferentiableGradCAM().cuda()
     optimizer = get_optimizer(cfg.optimizer, model.parameters(), cfg.lr)
     criterion = get_criterion(cfg.criterion)
