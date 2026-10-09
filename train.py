@@ -138,6 +138,32 @@ def get_dataloader(dataset_name, batch_size):
             )
             num_classes = len(train_dataset.classes)
 
+    elif name == "cub200":
+        transform_train_cub = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomRotation(15),
+            transforms.ColorJitter(brightness=0.2, contrast=0.2),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225])
+        ])
+        transform_val_cub = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225])
+        ])
+        train_dataset = datasets.ImageFolder(
+            root="./cub200/train",
+            transform=transform_train_cub
+        )
+        val_dataset = datasets.ImageFolder(
+            root="./cub200/test",
+            transform=transform_val_cub
+        )
+        num_classes = len(train_dataset.classes)
+
     else:
         raise ValueError(f"Dataset {dataset_name} non reconnu")
 
