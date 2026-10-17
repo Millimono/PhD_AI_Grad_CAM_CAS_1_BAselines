@@ -320,6 +320,8 @@ def main():
         fixed_labels=fixed_labels,
         use_adaptive_supervision=cfg.use_adaptive_supervision,
         total_epochs=cfg.epochs,
+        freeze_backbone=cfg.freeze_backbone,
+
     )
 
     # ----------------- Training loop (unchanged) -----------------
