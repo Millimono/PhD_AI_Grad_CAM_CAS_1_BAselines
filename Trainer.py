@@ -194,6 +194,10 @@ class Trainer:
             # save_dir=f"./logs/gradcam_analysis/{dataset_name}/{mode}/{self.mask_type}",
             # 🔥 Ajoute la perte de reconstruction si nécessaire
             total_loss_batch.backward()
+            if batch_idx == 0:
+                print("backbone grad is None :", self.model.feature_extractor.features[0].weight.grad is None)
+
+            
             self.optimizer.step()
 
             total_loss += total_loss_batch.item()
