@@ -12,7 +12,7 @@ class Trainer:
     def __init__(self, model, gradcam_module, optimizer, dataloader, criterion, 
                  gradcam_loss_weight=1.0, use_cam_loss=True,
                    fixed_images=None, fixed_labels=None,mask_type="center", mask_generator=None,
-                   use_adaptive_supervision=False, total_epochs=20):
+                   use_adaptive_supervision=False, total_epochs=20,freeze_backbone=False):
         
         self.use_cam_loss = use_cam_loss
         self.model = model
@@ -38,6 +38,10 @@ class Trainer:
         self.fixed_labels = fixed_labels
         self.use_adaptive_supervision = use_adaptive_supervision  # ou False si supervision fixe
         self.total_epochs = total_epochs  # passé depuis main()
+        
+        self.freeze_backbone = freeze_backbone
+        protocol = "frozen" if freeze_backbone else "finetune"
+        self.log_root = os.path.join("./logs", protocol)
 
         #self.set_fixed_images(self.dataloader, num_images=5)  # Pour visualiser un batch fixe
 
@@ -84,6 +88,10 @@ class Trainer:
 
     def train_epoch(self):
         self.model.train()
+        
+        if self.freeze_backbone:
+            self.model.feature_extractor.eval()
+        
         total_loss = 0
 
         epoch_cam_accumulator = []  # Pour stocker les CAMs de cette époque
@@ -179,11 +187,11 @@ class Trainer:
                             cam=cam.detach(),
                             cam_pre_relu=cam_pre_relu.detach(),
                             weights=weights.detach(),
-                            save_dir=f"./logs/gradcam_analysis/{dataset_name}/{mode}/{self.mask_type}",
+                            save_dir=os.path.join(self.log_root, "gradcam_analysis", dataset_name, mode, self.mask_type),
                             epoch=self.current_epoch,
                             layer_name="layer4"
                         )
-            
+            # save_dir=f"./logs/gradcam_analysis/{dataset_name}/{mode}/{self.mask_type}",
             # 🔥 Ajoute la perte de reconstruction si nécessaire
             total_loss_batch.backward()
             self.optimizer.step()
@@ -199,25 +207,49 @@ class Trainer:
 
         self.current_epoch += 1
 
-        # Visualiser les CAMs sur batch fixe après l'époque
-        if self.fixed_images is None or self.fixed_images.nelement() == 0:
-            print("⚠️ self.fixed_images est vide ou non initialisée.")
-        else:
-            print(f"✅ self.fixed_images: {self.fixed_images.shape}")
-            # self.model.eval()
-            # with torch.no_grad():
-            outputs, features = self.model(self.fixed_images)
-            target_logits = outputs.gather(1, self.fixed_labels.view(-1, 1)).squeeze()
-            grads = torch.autograd.grad(target_logits.sum(), features, retain_graph=True, create_graph=True)[0]
+        # # Visualiser les CAMs sur batch fixe après l'époque
+        # if self.fixed_images is None or self.fixed_images.nelement() == 0:
+        #     print("⚠️ self.fixed_images est vide ou non initialisée.")
+        # else:
+        #     print(f"✅ self.fixed_images: {self.fixed_images.shape}")
+        #     # self.model.eval()
+        #     # with torch.no_grad():
+        #     outputs, features = self.model(self.fixed_images)
+        #     target_logits = outputs.gather(1, self.fixed_labels.view(-1, 1)).squeeze()
+        #     grads = torch.autograd.grad(target_logits.sum(), features, retain_graph=True, create_graph=True)[0]
 
-            cams,_,_ = self.grad_cam(features, grads)
-            preds = outputs.argmax(dim=1)
+        #     cams,_,_ = self.grad_cam(features, grads)
+        #     preds = outputs.argmax(dim=1)
 
-            self.visualize_gradcam(self.fixed_images, cams, self.fixed_labels, self.current_epoch, batch_idx=0, max_images=len(self.fixed_images),preds=preds)
+        #     self.visualize_gradcam(self.fixed_images, cams, self.fixed_labels, self.current_epoch, batch_idx=0, max_images=len(self.fixed_images),preds=preds)
 
+        self.visualize_fixed_images()
 
         return total_loss / len(self.dataloader)
 
+
+    def visualize_fixed_images(self):
+            if self.fixed_images is None or self.fixed_images.numel() == 0:
+                print("⚠️ self.fixed_images est vide ou non initialisée.")
+                return
+
+            was_training = self.model.training
+            self.model.eval()                       # BN figé, pas de dropout
+
+            outputs, features = self.model(self.fixed_images)
+            target = outputs.gather(1, self.fixed_labels.view(-1, 1)).sum()
+            grads = torch.autograd.grad(target, features)[0]
+            cams, _, _ = self.grad_cam(features, grads)
+            preds = outputs.argmax(dim=1)
+
+            self.visualize_gradcam(self.fixed_images, cams.detach(), self.fixed_labels,
+                                self.current_epoch, batch_idx=0,
+                                max_images=len(self.fixed_images), preds=preds.detach())
+
+            self.model.train(was_training)          # on revient en mode train
+            
+
+    
     def update_adaptive_target(self, device, shape):
         """
         Calcule la moyenne des CAMs passées (sur tous les batches).
@@ -263,8 +295,17 @@ class Trainer:
     @torch.no_grad()
     def visualize_gradcam(self, images, cams, labels, epoch, batch_idx, max_images=4, preds=None):
 
+        # cams = cams.squeeze(1)  # (B, H, W)
+        # cams = (cams - cams.min(dim=1, keepdim=True)[0]) / (cams.max(dim=1, keepdim=True)[0] + 1e-5)
+
         cams = cams.squeeze(1)  # (B, H, W)
-        cams = (cams - cams.min(dim=1, keepdim=True)[0]) / (cams.max(dim=1, keepdim=True)[0] + 1e-5)
+        B = cams.shape[0]
+        flat = cams.reshape(B, -1)
+        mn = flat.min(dim=1)[0].view(B, 1, 1)
+        mx = flat.max(dim=1)[0].view(B, 1, 1)
+        cams = (cams - mn) / (mx - mn + 1e-5)
+    
+
         cams = F.interpolate(cams.unsqueeze(1), size=(224, 224), mode='bilinear', align_corners=False).squeeze(1)
 
         images = F.interpolate(images, size=(224, 224))  # (B, 3, 224, 224)
@@ -274,7 +315,8 @@ class Trainer:
 
         for i in range(min(max_images, images.shape[0])):
             img = images[i]
-            img = (img - img.min()) / (img.max() + 1e-5)
+            # img = (img - img.min()) / (img.max() + 1e-5)
+            img = (img - img.min()) / (img.max() - img.min() + 1e-5)
 
             cam = cams[i].cpu().numpy()
             heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
@@ -306,9 +348,11 @@ class Trainer:
 
 
             mode = "cam_supervised" if self.use_cam_loss else "baseline"
-            filename = os.path.join(folder_path, 
-                    f"{mode}_epoch_{epoch}_batch_{batch_idx}_img_{i}_true_{true_cls}_pred_{pred_cls}.png"
-)
+            # filename = os.path.join(folder_path, f"{mode}_epoch_{epoch}_batch_{batch_idx}_img_{i}_true_{true_cls}_pred_{pred_cls}.png")
+
+            img_dir = os.path.join(folder_path, f"img_{i:02d}_{true_cls}")
+            os.makedirs(img_dir, exist_ok=True)
+            filename = os.path.join(img_dir, f"{mode}_epoch{epoch:03d}_pred_{pred_cls}.png")
             #filename = os.path.join(folder_path, f"epoch_{epoch}_batch_{batch_idx}_img_{i}.png")
 
             plt.tight_layout()
@@ -332,14 +376,15 @@ class Trainer:
         Crée un dossier pour stocker les visualisations GradCAM en fonction :
         - du dataset
         - de la supervision CAM
-        - du type de masque
-        Exemple : ./logs/supervision_fixe/cams/cifar10/cam_supervised/center/
+        - du type de masque 
+        Exemple :  ./logs/supervision_fixe/cams/cifar10/cam_supervised/center/
         """
         # Nom du dataset si disponible
         dataset_name = getattr(self.dataloader.dataset, 'name', 'dataset_unknown')
         
         mode = "cam_supervised" if self.use_cam_loss else "baseline"
-        folder_path = os.path.join('./logs/supervision_fixe/cams', dataset_name, mode, self.mask_type)
+        # folder_path = os.path.join('./logs/supervision_fixe/cams', dataset_name, mode, self.mask_type)
+        folder_path =  os.path.join(self.log_root, 'cams', dataset_name, mode, self.mask_type)
 
         os.makedirs(folder_path, exist_ok=True)
         return folder_path
@@ -504,7 +549,8 @@ class Trainer:
         mode = "cam_supervised" if self.use_cam_loss else "baseline"
 
         # Construire le chemin complet du dossier
-        model_dir = os.path.join('./logs/supervision_fixe/models', dataset_name, mode, self.mask_type)
+        # model_dir = os.path.join('./logs/supervision_fixe/models', dataset_name, mode, self.mask_type)
+        model_dir =os.path.join(self.log_root, 'models', dataset_name, mode, self.mask_type)
         os.makedirs(model_dir, exist_ok=True)
 
         # Chemin complet du fichier de sauvegarde
@@ -527,7 +573,9 @@ class Trainer:
         mode = "cam_supervised" if self.use_cam_loss else "baseline"
 
         # Construire le dossier cible
-        model_dir = os.path.join('./logs/supervision_fixe/models', dataset_name, mode, self.mask_type)
+        # model_dir = os.path.join('./logs/supervision_fixe/models', dataset_name, mode, self.mask_type)
+        
+        model_dir = os.path.join(self.log_root, 'models', dataset_name, mode, self.mask_type)
         os.makedirs(model_dir, exist_ok=True)
 
         # Enlever toute extension si elle existe (pour éviter model_full.pt.pt)
@@ -563,7 +611,8 @@ class Trainer:
         mode = "cam_supervised" if self.use_cam_loss else "baseline"
 
         # Construire le dossier cible
-        model_dir = os.path.join('./logs/supervision_fixe/metrics', dataset_name, mode, self.mask_type)
+        # model_dir = os.path.join('./logs/supervision_fixe/metrics', dataset_name, mode, self.mask_type)
+        model_dir = os.path.join(self.log_root, 'metrics', dataset_name, mode, self.mask_type)
         os.makedirs(model_dir, exist_ok=True)
         
 

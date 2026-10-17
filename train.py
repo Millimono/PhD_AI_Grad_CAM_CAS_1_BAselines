@@ -218,6 +218,35 @@ def compute_metrics(true_labels, preds, probs, average="macro"):
     return acc, prec, rec, f1, auc
 
 
+
+import random
+
+def get_fixed_batch(val_dataset, dataset_name, root, n_per_class=1, max_classes=10, seed=0):
+    """Charge les indices fixes s'ils existent, sinon les crée une seule fois."""
+    path = os.path.join(root, f"{dataset_name}_fixed_indices.json")
+
+    if os.path.exists(path):
+        with open(path) as f:
+            indices = json.load(f)
+        print(f"✅ Indices fixes chargés depuis {path}")
+    else:
+        targets = [int(t) for t in val_dataset.targets]   # CIFAR, MNIST, ImageFolder
+        rng = random.Random(seed)
+        classes = sorted(set(targets))
+        if len(classes) > max_classes:                     # ex. CUB-200
+            classes = sorted(rng.sample(classes, max_classes))
+        indices = []
+        for c in classes:
+            idx_c = [i for i, t in enumerate(targets) if t == c]
+            indices += sorted(rng.sample(idx_c, min(n_per_class, len(idx_c))))
+        os.makedirs(root, exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(indices, f, indent=2)
+        print(f"🆕 Indices fixes créés dans {path} : {indices}")
+
+    imgs, labels = zip(*[val_dataset[i] for i in indices])
+    return torch.stack(imgs).cuda(), torch.tensor(labels).cuda()
+
 # --------------------------------------------------------------------------- #
 #  Main                                                                        #
 # --------------------------------------------------------------------------- #
@@ -244,21 +273,36 @@ def main():
 
     # ----------------- Fixed batch for visualization -----------------
     torch.manual_seed(cfg.seed)
-    fixed_images, fixed_labels = next(iter(train_loader))
-    fixed_images, fixed_labels = fixed_images.cuda(), fixed_labels.cuda()
-    os.makedirs("fixed_data", exist_ok=True)
-    torch.save(fixed_images.cpu(), "fixed_data/fixed_images.pt")
-    torch.save(fixed_labels.cpu(), "fixed_data/fixed_labels.pt")
-    print(f"✅ Premier batch sauvegardé dans fixed_data")
+    # fixed_images, fixed_labels = next(iter(train_loader))
+    # fixed_images, fixed_labels = fixed_images.cuda(), fixed_labels.cuda()
+    # os.makedirs("fixed_data", exist_ok=True)
+    assert os.path.isdir("/content/drive/MyDrive"), "Drive non monté : lance drive.mount('/content/drive')"
+    FIXED_ROOT = "/content/drive/MyDrive/projet_gradcam/fixed_data"   # ← adapte
+    fixed_images, fixed_labels = get_fixed_batch(
+        val_loader.dataset, cfg.dataset.lower(), root=FIXED_ROOT,
+        n_per_class=2 if num_classes <= 2 else 1,
+)
 
+    # torch.save(fixed_images.cpu(), "fixed_data/fixed_images.pt")
+    # torch.save(fixed_labels.cpu(), "fixed_data/fixed_labels.pt")
+    # print(f"✅ Premier batch sauvegardé dans fixed_data")
     train_loader.dataset.name = cfg.dataset.lower()
     val_loader.dataset.name = cfg.dataset.lower()
 
     # ----------------- Model & Trainer -----------------
     # model = get_model(cfg.model, num_classes)
     model = get_model(cfg.model, num_classes, pretrained=not cfg.no_pretrain)
+
+      
     gradcam_module = DifferentiableGradCAM().cuda()
-    optimizer = get_optimizer(cfg.optimizer, model.parameters(), cfg.lr)
+    # optimizer = get_optimizer(cfg.optimizer, model.parameters(), cfg.lr)
+    
+    if cfg.freeze_backbone:
+        for p in model.feature_extractor.parameters():
+            p.requires_grad = False
+    optimizer = get_optimizer(cfg.optimizer,
+                              [p for p in model.parameters() if p.requires_grad], cfg.lr)
+    
     criterion = get_criterion(cfg.criterion)
     mask_gen = MaskGenerator(device="cuda")
 

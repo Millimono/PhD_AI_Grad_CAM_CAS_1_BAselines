@@ -42,14 +42,14 @@ DEFAULTS: Dict[str, Any] = {
     "gradcam_loss_weight":      1.0,
     "save_dir":                 "./logs",
     "seed":                     42,
-    "no_pretrain":              False
+    "no_pretrain":              False,
+    "freeze_backbone":          False
 }
 
 VALID_MASKS = [
     "center", "circle", "border", "diffuse", "latent", "ellipse", "tissue",
     "gaussian_anisotropic", "gaussian_mixture", "radial", "directional",
     "sigmoid", "ring", "multi_circle", "border_multi_circle", "circle_with_wings","breast_shape",
-    "cub200",
 ]
 
 
@@ -143,6 +143,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Random seed. Default 42; expose only if you need it (e.g. multi-seed robustness).")
     p.add_argument("--no_pretrain", action="store_true", default=S,
                    help="Disable pretraining.")
+    p.add_argument("--freeze_backbone", action="store_true", default=S,
+                   help="Freeze backbone (linear probing).")
     return p
 
 

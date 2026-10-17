@@ -62,11 +62,17 @@ class FullModel(nn.Module):
         self.classifier = ClassifierHead(self.feature_extractor.out_channels, num_classes)
 
 
+    # def forward(self, x):
+    #     features = self.feature_extractor(x)
+    #     # features.retain_grad()  # ← AJOUT : permet à Grad-CAM de calculer les gradients
+    #     features = features.detach().requires_grad_(True)  # ← remplace retain_grad()
+
+    #     logits = self.classifier(features)
+    #     return logits, features
     def forward(self, x):
         features = self.feature_extractor(x)
-        # features.retain_grad()  # ← AJOUT : permet à Grad-CAM de calculer les gradients
-        features = features.detach().requires_grad_(True)  # ← remplace retain_grad()
-
+        if not features.requires_grad:      # cas backbone figé
+            features.requires_grad_(True)
         logits = self.classifier(features)
         return logits, features
 
