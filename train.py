@@ -268,6 +268,13 @@ def main():
         mode = f"⚙️ Entraînement baseline (sans Grad-CAM) avec {cfg.dataset} {cfg.mask_type}"
     print(f"\n===== MODE ACTIF : {mode} =====\n")
 
+    # ----------------- Seeds -----------------
+    random.seed(cfg.seed)
+    np.random.seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
+    torch.cuda.manual_seed_all(cfg.seed)
+    
+
     # ----------------- Dataset -----------------
     train_loader, val_loader, num_classes = get_dataloader(cfg.dataset, cfg.batch_size)
 
@@ -321,6 +328,8 @@ def main():
         use_adaptive_supervision=cfg.use_adaptive_supervision,
         total_epochs=cfg.epochs,
         freeze_backbone=cfg.freeze_backbone,
+        seed=cfg.seed,
+
 
     )
 

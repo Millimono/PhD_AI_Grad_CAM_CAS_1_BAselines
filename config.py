@@ -50,6 +50,7 @@ VALID_MASKS = [
     "center", "circle", "border", "diffuse", "latent", "ellipse", "tissue",
     "gaussian_anisotropic", "gaussian_mixture", "radial", "directional",
     "sigmoid", "ring", "multi_circle", "border_multi_circle", "circle_with_wings","breast_shape",
+    "tissue_fast",
 ]
 
 

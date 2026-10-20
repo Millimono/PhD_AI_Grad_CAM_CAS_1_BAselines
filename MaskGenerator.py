@@ -63,6 +63,10 @@ class MaskGenerator:
             return self.circle_with_wings_mask(shape, **kwargs)
         elif mask_type == "breast_shape":
             return self.breast_shape_mask(shape, **kwargs)
+        elif mask_type == "tissue_fast":
+            if image is None:
+                raise ValueError("Pour 'tissue_fast', il faut passer image=<tensor>")
+            return self.tissue_fast_mask(image, shape)
         else:
             raise ValueError(f"Masque inconnu: {mask_type}")
 
@@ -116,7 +120,8 @@ class MaskGenerator:
     #  Nouveaux masques anatomiques — mammographie                        #
     # ------------------------------------------------------------------ #
  
-    def ellipse_mask(self, shape, side="left", a_ratio=0.45, b_ratio=0.55, sigma_blend=0.08):
+    # def ellipse_mask(self, shape, side="left", a_ratio=0.45, b_ratio=0.55, sigma_blend=0.08):
+    def ellipse_mask(self, shape, side="left", a_ratio=0.45, b_ratio=0.55, sigma_blend=0.7):
         """
         Masque semi-elliptique gaussien, motivé par la morphologie du sein
         en mammographie (vue MLO ou CC).
@@ -419,7 +424,18 @@ class MaskGenerator:
         # directional_mask (spécifique mammographie)
         # “Impact of Analytical Spatial Priors on Weakly Supervised Localization in Mammography”
     # ------------------------------------------------------------------ #
-
+    def tissue_fast_mask(self, image, shape):
+        """
+        Masque de tissu : fraction de pixels non-fond dans chaque case de la CAM.
+        Suppose le fond mis à 0 par otsu_preprocess, puis normalisé ImageNet :
+        un pixel noir vaut alors -mean/std ≈ -2.118 sur le canal 0.
+        """
+        B, C, H, W = shape
+        background = -0.485 / 0.229
+        tissue = (image[:, 0:1] > background + 1e-3).float()        # (B, 1, 224, 224)
+        mask = F.adaptive_avg_pool2d(tissue, (H, W))                # (B, 1, 7, 7), valeurs dans [0, 1]
+        return mask
+    
     def multi_circle_mask(self, shape, centers=None, radius=0.15):
         B, C, H, W = shape
         

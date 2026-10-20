@@ -12,7 +12,7 @@ class Trainer:
     def __init__(self, model, gradcam_module, optimizer, dataloader, criterion, 
                  gradcam_loss_weight=1.0, use_cam_loss=True,
                    fixed_images=None, fixed_labels=None,mask_type="center", mask_generator=None,
-                   use_adaptive_supervision=False, total_epochs=20,freeze_backbone=False):
+                   use_adaptive_supervision=False, total_epochs=20,freeze_backbone=False, seed=42):
         
         self.use_cam_loss = use_cam_loss
         self.model = model
@@ -41,7 +41,8 @@ class Trainer:
         
         self.freeze_backbone = freeze_backbone
         protocol = "frozen" if freeze_backbone else "finetune"
-        self.log_root = os.path.join("./logs", protocol)
+        # self.log_root = os.path.join("./logs", protocol)
+        self.log_root = os.path.join("./logs", protocol, f"seed{seed}")
 
         #self.set_fixed_images(self.dataloader, num_images=5)  # Pour visualiser un batch fixe
 
@@ -143,7 +144,8 @@ class Trainer:
                 extra_args["latent_mask"] = self.latent_mask
             elif self.mask_type == "tissue":
                 extra_args["image"] = images 
-               
+            elif self.mask_type in ("tissue", "tissue_fast"):
+                extra_args["image"] = images
 
             mask_a_priori = self.mask_generator.generate(cam.shape, self.mask_type, **extra_args)
 
