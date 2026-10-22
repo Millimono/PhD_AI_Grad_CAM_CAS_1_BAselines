@@ -167,8 +167,13 @@ def get_dataloader(dataset_name, batch_size):
     else:
         raise ValueError(f"Dataset {dataset_name} non reconnu")
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+    # train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
+    # val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+
+    n_workers = os.cpu_count() or 2
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=n_workers)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=n_workers)
+
     return train_loader, val_loader, num_classes
 
 
@@ -273,7 +278,7 @@ def main():
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
     torch.cuda.manual_seed_all(cfg.seed)
-    
+
 
     # ----------------- Dataset -----------------
     train_loader, val_loader, num_classes = get_dataloader(cfg.dataset, cfg.batch_size)
@@ -351,17 +356,27 @@ def main():
         time_history.append(epoch_end - epoch_start)
         print(f"⏱️ Temps pour l'époque {epoch + 1}: {epoch_end - epoch_start:.2f} secondes")
 
-        preds, labels, probs = trainer.evaluate_predictions()
-        acc = trainer.evaluate_accuracy()
-        acc_t, prec_train, rec_train, f1_train, auc_train = compute_metrics(labels, preds, probs)
+        # preds, labels, probs = trainer.evaluate_predictions()
+        # # acc = trainer.evaluate_accuracy()
+        # acc_t, prec_train, rec_train, f1_train, auc_train = compute_metrics(labels, preds, probs)
 
-        print(f"Epoch {epoch + 1}")
-        print(f" TRAIN : - Loss: {loss:.4f}, Acc: {acc:.4f} ou Acc : {acc_t:.4f},\n"
-              f"  Prec: {prec_train:.4f}, Rec: {rec_train:.4f}, F1: {f1_train:.4f}, AUC: {auc_train}")
+        train_evaluated = (epoch + 1) % 5 == 0 or epoch == 0
+        if train_evaluated:
+            preds, labels, probs = trainer.evaluate_predictions()
+            acc_t, prec_train, rec_train, f1_train, auc_train = compute_metrics(labels, preds, probs)
+            print(f" TRAIN : - Loss: {loss:.4f}, Acc: {acc_t:.4f}, F1: {f1_train:.4f}, AUC: {auc_train}")
+        else:
+            acc_t = prec_train = rec_train = f1_train = auc_train = None
+            print(f" TRAIN : - Loss: {loss:.4f} (métriques train non évaluées)")
+
+        # print(f"Epoch {epoch + 1}")
+        # print(f" TRAIN : - Loss: {loss:.4f}, Acc : {acc_t:.4f},\n"
+        #       f"  Prec: {prec_train:.4f}, Rec: {rec_train:.4f}, F1: {f1_train:.4f}, AUC: {auc_train}")
 
         val_preds, val_labels, val_probs = trainer.evaluate_predictions_val(val_loader)
         acc_v, prec_val, rec_val, f1_val, auc_val = compute_metrics(val_labels, val_preds, val_probs)
         acc_val, val_loss = trainer.evaluate_accuracy_val_data(val_loader)
+        
 
         print(f" VAL : - Loss: {val_loss:.4f}, Acc: {acc_v:.4f} ou Acc : {acc_val:.4f},\n"
               f"  Prec: {prec_val:.4f}, Rec: {rec_val:.4f}, F1: {f1_val:.4f}, AUC: {auc_val}")
@@ -373,13 +388,22 @@ def main():
             trainer.save_full_and_state_model(trainer.model, "best_model")
             print(f"💾 Modèle sauvegardé à l'époque {best_epoch} avec F1: {best_f1:.4f}")
 
+        # train_metrics_history.append({
+        #     "epoch": epoch + 1, "loss": float(loss),
+        #     "accuracy": float(acc_t), "precision": float(prec_train),
+        #     "recall": float(rec_train), "f1_score": float(f1_train),
+        #     "auc": float(auc_train) if auc_train is not None else None,
+        #     "epoch_time": float(epoch_end - epoch_start),
+        # })
+
         train_metrics_history.append({
             "epoch": epoch + 1, "loss": float(loss),
-            "accuracy": float(acc_t), "precision": float(prec_train),
-            "recall": float(rec_train), "f1_score": float(f1_train),
-            "auc": float(auc_train) if auc_train is not None else None,
+            "accuracy": acc_t, "precision": prec_train,
+            "recall": rec_train, "f1_score": f1_train,
+            "auc": auc_train,
             "epoch_time": float(epoch_end - epoch_start),
         })
+
         val_metrics_history.append({
             "epoch": epoch + 1, "loss": float(val_loss),
             "accuracy": float(acc_v), "precision": float(prec_val),
