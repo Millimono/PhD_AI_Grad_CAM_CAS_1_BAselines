@@ -15,11 +15,16 @@ class DifferentiableGradCAM(nn.Module):
         cam = F.relu(cam_pre_relu)  # CAM = ReLU(S)
         return cam, cam_pre_relu, weights
 
-    def gradcam_loss(self, cam, target_mask):
-        """
-        L_cam = ||CAM - M||^2
-        """
-        return F.mse_loss(cam, target_mask)
+    # def gradcam_loss(self, cam, target_mask):
+    #     """
+    #     L_cam = ||CAM - M||^2
+    #     """
+    #     return F.mse_loss(cam, target_mask)
+    
+    def gradcam_loss(self, cam, target_mask, eps=1e-8):
+        """L_out : fraction de la CAM située hors du masque (0 = tout dans le masque)."""
+        cam_n = cam / (cam.sum(dim=(2, 3), keepdim=True) + eps)
+        return (cam_n * (1 - target_mask)).sum(dim=(2, 3)).mean()
     
     
 # Example usage:

@@ -434,6 +434,8 @@ class MaskGenerator:
         background = -0.485 / 0.229
         tissue = (image[:, 0:1] > background + 1e-3).float()        # (B, 1, 224, 224)
         mask = F.adaptive_avg_pool2d(tissue, (H, W))                # (B, 1, 7, 7), valeurs dans [0, 1]
+        mask = torch.where(mask > 0.3, mask, torch.zeros_like(mask))   # ← nouvelle ligne
+
         return mask
     
     def multi_circle_mask(self, shape, centers=None, radius=0.15):
