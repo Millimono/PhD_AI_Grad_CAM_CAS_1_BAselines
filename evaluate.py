@@ -42,6 +42,7 @@ EVAL_DEFAULTS: Dict[str, Any] = {
     "baseline":    "black",        # "black" | "blur"
     "out":         "logs/explainability",
     "max_batches": None,
+    "map": "gradcam",
 }
 
 
@@ -90,10 +91,14 @@ def get_eval_config() -> argparse.Namespace:
                    help="rationale fraction for comprehensiveness/sufficiency")
     p.add_argument("--eraser_bins", type=_str2bool, nargs="?", const=True, default=S,
                    help="aggregate comp/suff over {0.01,0.05,0.1,0.2,0.5}")
-    p.add_argument("--baseline",    choices=["black", "blur"], default=S)
+    # p.add_argument("--baseline",    choices=["black", "blur"], default=S)
+    p.add_argument("--baseline",    choices=["black", "black_norm", "blur"], default=S)
+    p.add_argument("--map",         choices=["gradcam", "decision"], default=S)
+
     p.add_argument("--out",         type=str,   default=S)
     p.add_argument("--max_batches", type=int,   default=S,
                    help="evaluate only the first N batches (quick check)")
+    p.add_argument("--map",         choices=["gradcam", "decision", "random"], default=S)
     cli = vars(p.parse_args())
 
     cfg = dict(EVAL_DEFAULTS)
@@ -134,11 +139,12 @@ def main():
     keep = (0.01, 0.05, 0.1, 0.2, 0.5) if args.eraser_bins else (args.threshold,)
 
     os.makedirs(args.out, exist_ok=True)
-    tag = f"{args.dataset}_{args.baseline}"
+    # tag = f"{args.dataset}_{args.baseline}"
+    tag = f"{args.dataset}_{args.map}_{args.baseline}"
     means, records = compute_metrics_on_loader(
         model, gradcam, val_loader, device=device,
         steps=args.steps, keep_fractions=keep, baseline=args.baseline,
-        csv_path=os.path.join(args.out, f"per_image_{tag}.csv"),
+        csv_path=os.path.join(args.out, f"per_image_{tag}.csv"),map_type=args.map,
     )
 
     summary = {"config": vars(args), "n_images": len(records), "means": means}
@@ -150,6 +156,9 @@ def main():
     print(f"Insertion AUC       : {means['insertion']:.4f}   (higher is better)")
     print(f"Comprehensiveness   : {means['comprehensiveness']:.4f}   (higher is better)")
     print(f"Sufficiency         : {means['sufficiency']:.4f}   (lower is better)")
+    n_empty = sum(r["empty_map"] for r in records)
+    print(f"Cartes vides        : {n_empty} / {len(records)}")
+
     print(f"\nSaved to {args.out}/")
 
 

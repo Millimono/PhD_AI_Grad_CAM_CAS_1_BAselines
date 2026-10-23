@@ -21,6 +21,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+IMAGENET_STD  = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+
 # np.trapz was renamed to np.trapezoid in NumPy 2.0 — support both.
 _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
 
@@ -28,31 +31,74 @@ _trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
 # --------------------------------------------------------------------------- #
 #  Saliency (Grad-CAM) for the whole batch                                    #
 # --------------------------------------------------------------------------- #
-def compute_cams(model, gradcam, images, labels, device):
-    """Returns saliency maps upsampled to the input resolution, normalized to [0,1].
-    Shape: (B, 1, H, W), detached."""
+# def compute_cams(model, gradcam, images, labels, device):
+#     """Returns saliency maps upsampled to the input resolution, normalized to [0,1].
+#     Shape: (B, 1, H, W), detached."""
+#     model.eval()
+#     images = images.to(device)
+#     labels = labels.to(device)
+
+#     outputs, features = model(images)
+#     target = outputs.gather(1, labels.view(-1, 1)).squeeze(1).sum()
+#     grads = torch.autograd.grad(target, features, retain_graph=False, create_graph=False)[0]
+
+#     cam, _, _ = gradcam(features, grads)                                # (B,1,h,w)
+#     cam = F.interpolate(cam, size=images.shape[2:], mode="bilinear", align_corners=False)
+
+#     B, _, H, W = cam.shape
+#     flat = cam.view(B, -1)
+#     mn = flat.min(dim=1, keepdim=True)[0]
+#     mx = flat.max(dim=1, keepdim=True)[0]
+#     flat = (flat - mn) / (mx - mn + 1e-8)
+#     return flat.view(B, 1, H, W).detach()
+
+def compute_cams(model, gradcam, images, labels, device, map_type="gradcam"):
+    """Cartes upsamplées à la résolution d'entrée, normalisées dans [0,1].
+    map_type = "gradcam"  : Grad-CAM classique (ReLU) de la vraie classe
+    map_type = "decision" : contribution signée de chaque case à la marge du logit,
+                            S_y - S_autres (identité exacte pour une tête GAP + Linear)
+    Renvoie (cams (B,1,H,W), empty (B,) = carte entièrement nulle avant normalisation)."""
     model.eval()
-    images = images.to(device)
-    labels = labels.to(device)
-
+    images, labels = images.to(device), labels.to(device)
     outputs, features = model(images)
-    target = outputs.gather(1, labels.view(-1, 1)).squeeze(1).sum()
-    grads = torch.autograd.grad(target, features, retain_graph=False, create_graph=False)[0]
 
-    cam, _, _ = gradcam(features, grads)                                # (B,1,h,w)
+    if map_type == "gradcam":
+        target = outputs.gather(1, labels.view(-1, 1)).squeeze(1).sum()
+        grads = torch.autograd.grad(target, features, retain_graph=False, create_graph=False)[0]
+        cam, _, _ = gradcam(features, grads)                           # (B,1,h,w)
+    elif map_type == "decision":
+        with torch.no_grad():
+            W = model.classifier.fc.weight                             # (C,K)
+            HW = features.shape[2] * features.shape[3]
+            S = torch.einsum("ck,bkhw->bchw", W, features) / HW        # (B,C,h,w)
+            idx = torch.arange(S.shape[0], device=S.device)
+            S_y = S[idx, labels]                                       # (B,h,w)
+            S_other = (S.sum(dim=1) - S_y) / (S.shape[1] - 1)          # moyenne des autres classes
+            cam = (S_y - S_other).unsqueeze(1)
+    elif map_type == "random":
+        # Contrôle : carte aléatoire à la même résolution que la CAM (7x7), puis upsamplée
+        g = torch.Generator(device=features.device).manual_seed(0)
+        cam = torch.rand(features.shape[0], 1, features.shape[2], features.shape[3],
+                         device=features.device, generator=g)
+    else:
+        raise ValueError(f"Unknown map_type '{map_type}'.")
+
+    cam = cam.detach()
     cam = F.interpolate(cam, size=images.shape[2:], mode="bilinear", align_corners=False)
-
     B, _, H, W = cam.shape
-    flat = cam.view(B, -1)
+    flat = cam.reshape(B, -1)
     mn = flat.min(dim=1, keepdim=True)[0]
     mx = flat.max(dim=1, keepdim=True)[0]
+    empty = (mx - mn).view(-1) <= 1e-8                                 # carte constante (ex. Grad-CAM nulle)
     flat = (flat - mn) / (mx - mn + 1e-8)
-    return flat.view(B, 1, H, W).detach()
-
+    return flat.view(B, 1, H, W), empty
 
 def _make_baseline(img, kind="black"):
     if kind == "black":
         return torch.zeros_like(img)
+    if kind == "black_norm":   # vrai noir pour des images normalisées ImageNet (MiniDDSM, CXR, CUB)
+        black = (0 - IMAGENET_MEAN) / IMAGENET_STD
+        return black.to(img.device, img.dtype).expand_as(img).clone()
     if kind == "blur":
         k = 11
         coords = torch.arange(k, device=img.device, dtype=img.dtype) - k // 2
@@ -149,7 +195,7 @@ def _image_metrics(model, img, cam, label, baseline, steps, keep_fractions):
 #  Dataset-level driver                                                       #
 # --------------------------------------------------------------------------- #
 def compute_metrics_on_loader(model, gradcam, dataloader, device="cuda",
-                              steps=50, keep_fractions=(0.5,), baseline="black",
+                              steps=50, keep_fractions=(0.5,), baseline="black",map_type="gradcam",
                               csv_path=None, progress=True):
     """Runs the four metrics over a DataLoader and returns the means plus a
     per-image record list. Optionally writes a CSV."""
@@ -163,14 +209,19 @@ def compute_metrics_on_loader(model, gradcam, dataloader, device="cuda",
     records = []
     for images, labels in iterator:
         images, labels = images.to(device), labels.to(device)
-        cams = compute_cams(model, gradcam, images, labels, device)     # (B,1,H,W)
+        # cams = compute_cams(model, gradcam, images, labels, device)     # (B,1,H,W)
+        cams, empty = compute_cams(model, gradcam, images, labels, device, map_type=map_type)
 
         for i in range(images.shape[0]):
             img = images[i:i + 1]
             cam = cams[i, 0]
             label = int(labels[i].item())
             base = _make_baseline(img, baseline)
-            records.append(_image_metrics(model, img, cam, label, base, steps, keep_fractions))
+            # records.append(_image_metrics(model, img, cam, label, base, steps, keep_fractions))
+            
+            rec = _image_metrics(model, img, cam, label, base, steps, keep_fractions)
+            rec["empty_map"] = bool(empty[i])
+            records.append(rec)
 
     means = {k: float(np.mean([r[k] for r in records]))
              for k in ("deletion", "insertion", "comprehensiveness", "sufficiency")}
