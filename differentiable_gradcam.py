@@ -26,9 +26,12 @@ class DifferentiableGradCAM(nn.Module):
     #     cam_n = cam / (cam.sum(dim=(2, 3), keepdim=True) + eps)
     #     return (cam_n * (1 - target_mask)).sum(dim=(2, 3)).mean()
     
-    def gradcam_loss(self, cam, target_mask):
-        """L_out non normalisée : activation moyenne hors du masque."""
-        return (cam * (1 - target_mask)).mean()
+    # def gradcam_loss(self, cam, target_mask):
+    #     """L_out non normalisée : activation moyenne hors du masque."""
+    #     return (cam * (1 - target_mask)).mean()
+    def gradcam_loss(self, S_all, target_mask):
+        """L_out : évidence de toutes les classes (pré-ReLU, valeur absolue) hors du masque."""
+        return (S_all.abs() * (1 - target_mask)).mean()
     
     
 # Example usage:

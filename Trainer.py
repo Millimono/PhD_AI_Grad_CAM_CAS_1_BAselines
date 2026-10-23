@@ -105,6 +105,10 @@ class Trainer:
 #------------------------------------------------------------------------------>
             outputs, features = self.model(images)  # outputs: (B, C)
 
+            W = self.model.classifier.fc.weight                                   # (C, K)
+            HW = features.shape[2] * features.shape[3]
+            S_all = torch.einsum("ck,bkhw->bchw", W, features) / HW               # (B, C, H, W)
+
             # Sélectionne le logit correspondant à la classe cible pour chaque échantillon
             target_logits = outputs.gather(1, labels.view(-1, 1)).squeeze()  # (B,)
 
@@ -118,6 +122,7 @@ class Trainer:
             #                 create_graph=True, retain_graph=True)[0]
 
             loss_class = self.criterion(outputs, labels)
+            
 
 # ------------------------------------------------------------------------------->            
             
@@ -161,7 +166,8 @@ class Trainer:
                 target_mask = mask_a_priori
             
             if self.use_cam_loss:
-                    loss_cam = self.grad_cam.gradcam_loss(cam, target_mask)
+                    # loss_cam = self.grad_cam.gradcam_loss(cam, target_mask)
+                    loss_cam = self.grad_cam.gradcam_loss(S_all, target_mask)
                     # loss_cam = F.mse_loss(cam, target_mask)
 
                     if self.use_adaptive_supervision:
