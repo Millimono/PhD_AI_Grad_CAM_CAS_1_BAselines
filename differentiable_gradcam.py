@@ -21,10 +21,14 @@ class DifferentiableGradCAM(nn.Module):
     #     """
     #     return F.mse_loss(cam, target_mask)
     
-    def gradcam_loss(self, cam, target_mask, eps=1e-8):
-        """L_out : fraction de la CAM située hors du masque (0 = tout dans le masque)."""
-        cam_n = cam / (cam.sum(dim=(2, 3), keepdim=True) + eps)
-        return (cam_n * (1 - target_mask)).sum(dim=(2, 3)).mean()
+    # def gradcam_loss(self, cam, target_mask, eps=1e-8):
+    #     """L_out : fraction de la CAM située hors du masque (0 = tout dans le masque)."""
+    #     cam_n = cam / (cam.sum(dim=(2, 3), keepdim=True) + eps)
+    #     return (cam_n * (1 - target_mask)).sum(dim=(2, 3)).mean()
+    
+    def gradcam_loss(self, cam, target_mask):
+        """L_out non normalisée : activation moyenne hors du masque."""
+        return (cam * (1 - target_mask)).mean()
     
     
 # Example usage:

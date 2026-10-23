@@ -96,6 +96,7 @@ class Trainer:
         total_loss = 0
 
         epoch_cam_accumulator = []  # Pour stocker les CAMs de cette époque
+        total_cls, total_cam = 0.0, 0.0
 
         for batch_idx, (images, labels) in enumerate(self.dataloader):
             images, labels = images.cuda(), labels.cuda()
@@ -196,13 +197,17 @@ class Trainer:
             # save_dir=f"./logs/gradcam_analysis/{dataset_name}/{mode}/{self.mask_type}",
             # 🔥 Ajoute la perte de reconstruction si nécessaire
             total_loss_batch.backward()
-            if batch_idx == 0:
-                print("backbone grad is None :", self.model.feature_extractor.features[0].weight.grad is None)
+            # if batch_idx == 0:
+            #     print("backbone grad is None :", self.model.feature_extractor.features[0].weight.grad is None)
 
             
             self.optimizer.step()
 
             total_loss += total_loss_batch.item()
+            
+            total_cls += loss_class.item()
+            if self.use_cam_loss:
+                total_cam += loss_cam.item()
 
         # 🔁 Enregistre toutes les CAMs de cette époque
         epoch_cams = torch.cat(epoch_cam_accumulator, dim=0)  # (N, 1, H, W)
@@ -230,6 +235,11 @@ class Trainer:
         #     self.visualize_gradcam(self.fixed_images, cams, self.fixed_labels, self.current_epoch, batch_idx=0, max_images=len(self.fixed_images),preds=preds)
 
         self.visualize_fixed_images()
+
+        n = len(self.dataloader)
+        self.last_loss_class = total_cls / n
+        self.last_loss_cam = total_cam / n
+        print(f"  loss_class = {self.last_loss_class:.4f} | loss_cam = {self.last_loss_cam:.4f}")
 
         return total_loss / len(self.dataloader)
 

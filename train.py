@@ -406,6 +406,8 @@ def main():
 
         val_metrics_history.append({
             "epoch": epoch + 1, "loss": float(val_loss),
+            "loss_class": trainer.last_loss_class,
+            "loss_cam": trainer.last_loss_cam,
             "accuracy": float(acc_v), "precision": float(prec_val),
             "recall": float(rec_val), "f1_score": float(f1_val),
             "auc": float(auc_val) if auc_val is not None else None,
