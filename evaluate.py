@@ -93,7 +93,7 @@ def get_eval_config() -> argparse.Namespace:
                    help="aggregate comp/suff over {0.01,0.05,0.1,0.2,0.5}")
     # p.add_argument("--baseline",    choices=["black", "blur"], default=S)
     p.add_argument("--baseline",    choices=["black", "black_norm", "blur"], default=S)
-    p.add_argument("--map",         choices=["gradcam", "decision"], default=S)
+    # p.add_argument("--map",         choices=["gradcam", "decision"], default=S)
 
     p.add_argument("--out",         type=str,   default=S)
     p.add_argument("--max_batches", type=int,   default=S,
