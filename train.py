@@ -43,7 +43,8 @@ sys.stdout.reconfigure(encoding="utf-8")
 # --------------------------------------------------------------------------- #
 #  Data / model / optimizer factories — unchanged from the original train.py  #
 # --------------------------------------------------------------------------- #
-def get_dataloader(dataset_name, batch_size):
+def get_dataloader(dataset_name, batch_size, return_test=False):
+    test_dataset = None
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -105,38 +106,65 @@ def get_dataloader(dataset_name, batch_size):
         )
         num_classes = len(train_dataset.classes)
 
+    # elif name == "miniddsm":
+    #         from PIL import Image
+    #         import numpy as np
+    #         from skimage.filters import threshold_otsu
+            
+    #         def otsu_preprocess(img):
+    #             gray = np.array(img.convert('L'))
+    #             try:
+    #                 thresh = threshold_otsu(gray)
+    #                 mask = gray > thresh
+    #                 result = gray * mask
+    #             except Exception:
+    #                 result = gray
+    #             return Image.fromarray(result).convert('RGB')
+            
+    #         transform_miniddsm = transforms.Compose([
+    #             transforms.Lambda(otsu_preprocess),
+    #             transforms.Resize((224, 224)),
+    #             transforms.ToTensor(),
+    #             transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    #                                 std=[0.229, 0.224, 0.225])
+    #         ])
+            
+    #         train_dataset = datasets.ImageFolder(
+    #             root="./miniddsm_binary/train", 
+    #             transform=transform_miniddsm
+    #         )
+    #         val_dataset = datasets.ImageFolder(
+    #             root="./miniddsm_binary/val", 
+    #             transform=transform_miniddsm
+    #         )
+    #         num_classes = len(train_dataset.classes)
+
     elif name == "miniddsm":
-            from PIL import Image
-            import numpy as np
-            from skimage.filters import threshold_otsu
-            
-            def otsu_preprocess(img):
-                gray = np.array(img.convert('L'))
-                try:
-                    thresh = threshold_otsu(gray)
-                    mask = gray > thresh
-                    result = gray * mask
-                except Exception:
-                    result = gray
-                return Image.fromarray(result).convert('RGB')
-            
-            transform_miniddsm = transforms.Compose([
-                transforms.Lambda(otsu_preprocess),
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                    std=[0.229, 0.224, 0.225])
-            ])
-            
-            train_dataset = datasets.ImageFolder(
-                root="./miniddsm_binary/train", 
-                transform=transform_miniddsm
-            )
-            val_dataset = datasets.ImageFolder(
-                root="./miniddsm_binary/val", 
-                transform=transform_miniddsm
-            )
-            num_classes = len(train_dataset.classes)
+        from PIL import Image
+        from skimage.filters import threshold_otsu
+
+        def otsu_preprocess(img):
+            gray = np.array(img.convert('L'))
+            try:
+                result = gray * (gray > threshold_otsu(gray))
+            except Exception:
+                result = gray
+            return Image.fromarray(result.astype(np.uint8)).convert('RGB')
+
+        transform_miniddsm = transforms.Compose([
+            transforms.Lambda(otsu_preprocess),
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+        root = "./miniddsm_split"
+        train_dataset = datasets.ImageFolder(f"{root}/train", transform=transform_miniddsm)
+        val_dataset   = datasets.ImageFolder(f"{root}/val",   transform=transform_miniddsm)
+        test_dataset  = datasets.ImageFolder(f"{root}/test",  transform=transform_miniddsm)
+        num_classes = len(train_dataset.classes)
+        for nm, d in [("train", train_dataset), ("val", val_dataset), ("test", test_dataset)]:
+            counts = np.bincount(d.targets, minlength=num_classes).tolist()
+            print(f"📊 MiniDDSM {nm:5s} : {len(d)} images | {dict(zip(d.classes, counts))}")
 
     elif name == "cub200":
         transform_train_cub = transforms.Compose([
@@ -173,8 +201,15 @@ def get_dataloader(dataset_name, batch_size):
     n_workers = os.cpu_count() or 2
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=n_workers)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=n_workers)
-
+    
+    if return_test:
+        if test_dataset is None:
+            raise NotImplementedError(f"Pas de jeu de test séparé défini pour {dataset_name}")
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=n_workers)
+        return train_loader, val_loader, num_classes, test_loader
     return train_loader, val_loader, num_classes
+
+    # return train_loader, val_loader, num_classes
 
 
 def get_model(model_name, num_classes, pretrained=True):
@@ -281,7 +316,13 @@ def main():
 
 
     # ----------------- Dataset -----------------
-    train_loader, val_loader, num_classes = get_dataloader(cfg.dataset, cfg.batch_size)
+    # train_loader, val_loader, num_classes = get_dataloader(cfg.dataset, cfg.batch_size)
+
+    if cfg.dataset.lower() == "miniddsm":
+        train_loader, val_loader, num_classes, test_loader = get_dataloader(cfg.dataset, cfg.batch_size, return_test=True)
+    else:
+        train_loader, val_loader, num_classes = get_dataloader(cfg.dataset, cfg.batch_size)
+        test_loader = None
 
     # ----------------- Fixed batch for visualization -----------------
     torch.manual_seed(cfg.seed)
@@ -423,6 +464,24 @@ def main():
     )
 
     print(f"✅ Entraînement terminé. Meilleur modèle à l'epoch {best_epoch} avec F1 = {best_f1:.4f}")
+
+        # ----------------- Test final : dernière époque ET meilleur modèle (choisi sur la val) -----------------
+    if test_loader is not None:
+        def _test(tag):
+            p, l, pr = trainer.evaluate_predictions_val(test_loader)
+            acc, prec, rec, f1, auc = compute_metrics(l, p, pr)
+            loss = float(-np.log(pr[np.arange(len(l)), l] + 1e-12).mean())
+            print(f"🧪 TEST ({tag}) : Acc {acc:.4f} | F1 {f1:.4f} | AUC {auc:.4f} | Loss {loss:.4f}")
+            return {"accuracy": float(acc), "precision": float(prec), "recall": float(rec),
+                    "f1_score": float(f1), "auc": float(auc) if auc is not None else None, "loss": loss}
+
+        test_res = {"last_epoch": _test("dernière époque")}
+        mode_dir = "cam_supervised" if cfg.use_cam_loss else "baseline"
+        best_path = os.path.join(trainer.log_root, "models", cfg.dataset.lower(), mode_dir, cfg.mask_type, "best_model.pt")
+        trainer.model = Trainer.load_full_model(best_path)
+        test_res["best_val"] = _test(f"meilleur modèle, époque {best_epoch}")
+        test_res["best_epoch"] = best_epoch
+        trainer.save_list_as_json(test_res, "test_metrics.json")
 
 
 if __name__ == "__main__":
