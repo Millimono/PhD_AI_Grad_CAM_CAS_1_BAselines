@@ -123,7 +123,8 @@ def main():
     args = get_eval_config()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    _, val_loader, _ = get_dataloader(args.dataset, args.batch_size)
+    # _, val_loader, _ = get_dataloader(args.dataset, args.batch_size)
+    _, _, _, val_loader = get_dataloader(args.dataset, args.batch_size, return_test=True)
     val_loader.dataset.name = args.dataset.lower()
 
     if args.max_batches is not None:

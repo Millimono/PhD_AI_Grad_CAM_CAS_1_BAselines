@@ -36,6 +36,8 @@ from Trainer import Trainer
 from differentiable_gradcam import DifferentiableGradCAM
 from MaskGenerator import MaskGenerator
 from Model import FullModel
+from scipy.ndimage import label as _cc_label, binary_fill_holes, binary_opening
+from PIL import Image
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -43,6 +45,24 @@ sys.stdout.reconfigure(encoding="utf-8")
 # --------------------------------------------------------------------------- #
 #  Data / model / optimizer factories — unchanged from the original train.py  #
 # --------------------------------------------------------------------------- #
+
+
+def breast_preprocess(img, margin=15, min_thr=20):
+    """Garde le sein (plus grande zone au-dessus du niveau du fond, trous bouchés), met le reste à 0."""
+    g = np.array(img.convert("L"))
+    small = np.array(img.convert("L").resize((g.shape[1] // 4, g.shape[0] // 4)))
+    h, w = small.shape; b = max(2, int(0.05 * min(h, w)))
+    border = np.concatenate([small[:b].ravel(), small[-b:].ravel(), small[:, :b].ravel(), small[:, -b:].ravel()])
+    thr = max(min_thr, np.median(border) + margin)
+    fg = binary_opening(small > thr, structure=np.ones((5, 5)))
+    lab, n = _cc_label(fg)
+    if n == 0:
+        return img.convert("RGB")
+    breast = binary_fill_holes(lab == (np.bincount(lab.ravel())[1:].argmax() + 1))
+    breast = np.array(Image.fromarray(breast.astype(np.uint8) * 255).resize((g.shape[1], g.shape[0]))) > 127
+    return Image.fromarray((g * breast).astype(np.uint8)).convert("RGB")
+
+
 def get_dataloader(dataset_name, batch_size, return_test=False):
     test_dataset = None
     transform = transforms.Compose([
@@ -152,7 +172,7 @@ def get_dataloader(dataset_name, batch_size, return_test=False):
             return Image.fromarray(result.astype(np.uint8)).convert('RGB')
 
         transform_miniddsm = transforms.Compose([
-            transforms.Lambda(otsu_preprocess),
+            transforms.Lambda(breast_preprocess),
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
@@ -356,7 +376,14 @@ def main():
     optimizer = get_optimizer(cfg.optimizer,
                               [p for p in model.parameters() if p.requires_grad], cfg.lr)
     
+    # criterion = get_criterion(cfg.criterion)
     criterion = get_criterion(cfg.criterion)
+    if cfg.dataset.lower() == "miniddsm" and cfg.criterion.lower() == "crossentropy":
+        counts = np.bincount(train_loader.dataset.targets, minlength=num_classes)
+        w = torch.tensor(counts.sum() / (num_classes * counts), dtype=torch.float32).cuda()
+        criterion = nn.CrossEntropyLoss(weight=w)
+        print(f"⚖️ Poids de classe : {dict(zip(train_loader.dataset.classes, w.tolist()))}")
+
     mask_gen = MaskGenerator(device="cuda")
 
     trainer = Trainer(
