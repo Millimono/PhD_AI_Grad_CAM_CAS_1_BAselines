@@ -63,6 +63,13 @@ def breast_preprocess(img, margin=15, min_thr=20):
     return Image.fromarray((g * breast).astype(np.uint8)).convert("RGB")
 
 
+def _subset(ds, idx):
+    from torch.utils.data import Subset
+    s = Subset(ds, list(idx))
+    s.targets = [ds.targets[i] for i in s.indices]
+    s.classes, s.class_to_idx = ds.classes, ds.class_to_idx
+    return s
+
 def get_dataloader(dataset_name, batch_size, return_test=False):
     test_dataset = None
     transform = transforms.Compose([
@@ -71,10 +78,23 @@ def get_dataloader(dataset_name, batch_size, return_test=False):
     ])
 
     name = dataset_name.lower()
+    # if name == "cifar10":
+    #     train_dataset = datasets.CIFAR10(root="./data", train=True, download=True, transform=transform)
+    #     val_dataset = datasets.CIFAR10(root="./data", train=False, download=True, transform=transform)
+    #     num_classes = 10
     if name == "cifar10":
-        train_dataset = datasets.CIFAR10(root="./data", train=True, download=True, transform=transform)
-        val_dataset = datasets.CIFAR10(root="./data", train=False, download=True, transform=transform)
+        tf = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+        full = datasets.CIFAR10(root="./data", train=True, download=True, transform=tf)
+        perm = np.random.RandomState(0).permutation(len(full))      # découpage fixe, indépendant de la graine
+        val_dataset   = _subset(full, perm[:5000])                    # 5 000 images de validation
+        train_dataset = _subset(full, perm[5000:])                    # 45 000 images d'entraînement
+        test_dataset  = datasets.CIFAR10(root="./data", train=False, download=True, transform=tf)
         num_classes = 10
+
     elif name == "mnist":
         transform = transforms.Compose([
             transforms.Resize((224, 224)),
@@ -338,7 +358,7 @@ def main():
     # ----------------- Dataset -----------------
     # train_loader, val_loader, num_classes = get_dataloader(cfg.dataset, cfg.batch_size)
 
-    if cfg.dataset.lower() == "miniddsm":
+    if cfg.dataset.lower() in ("miniddsm", "cifar10"):
         train_loader, val_loader, num_classes, test_loader = get_dataloader(cfg.dataset, cfg.batch_size, return_test=True)
     else:
         train_loader, val_loader, num_classes = get_dataloader(cfg.dataset, cfg.batch_size)
