@@ -424,20 +424,37 @@ class MaskGenerator:
         # directional_mask (spécifique mammographie)
         # “Impact of Analytical Spatial Priors on Weakly Supervised Localization in Mammography”
     # ------------------------------------------------------------------ #
+    # def tissue_fast_mask(self, image, shape):
+    #     """
+    #     Masque de tissu : fraction de pixels non-fond dans chaque case de la CAM.
+    #     Suppose le fond mis à 0 par otsu_preprocess, puis normalisé ImageNet :
+    #     un pixel noir vaut alors -mean/std ≈ -2.118 sur le canal 0.
+    #     """
+    #     B, C, H, W = shape
+    #     background = -0.485 / 0.229
+    #     tissue = (image[:, 0:1] > background + 1e-3).float()        # (B, 1, 224, 224)
+    #     mask = F.adaptive_avg_pool2d(tissue, (H, W))                # (B, 1, 7, 7), valeurs dans [0, 1]
+    #     mask = torch.where(mask > 0.3, mask, torch.zeros_like(mask))   # ← nouvelle ligne
+
+    #     return mask
+
+
     def tissue_fast_mask(self, image, shape):
         """
         Masque de tissu : fraction de pixels non-fond dans chaque case de la CAM.
-        Suppose le fond mis à 0 par otsu_preprocess, puis normalisé ImageNet :
-        un pixel noir vaut alors -mean/std ≈ -2.118 sur le canal 0.
+        Suppose le fond mis à 0 par le prétraitement (breast_preprocess ou head_preprocess),
+        puis normalisé ImageNet : un pixel noir vaut alors -mean_c/std_c sur chaque canal c.
         """
         B, C, H, W = shape
-        background = -0.485 / 0.229
-        tissue = (image[:, 0:1] > background + 1e-3).float()        # (B, 1, 224, 224)
-        mask = F.adaptive_avg_pool2d(tissue, (H, W))                # (B, 1, 7, 7), valeurs dans [0, 1]
-        mask = torch.where(mask > 0.3, mask, torch.zeros_like(mask))   # ← nouvelle ligne
-
+        mean = torch.tensor([0.485, 0.456, 0.406], device=image.device).view(1, 3, 1, 1)
+        std  = torch.tensor([0.229, 0.224, 0.225], device=image.device).view(1, 3, 1, 1)
+        background = -mean / std
+        tissue = (image > background + 1e-3).any(dim=1, keepdim=True).float()   # (B, 1, 224, 224)
+        mask = F.adaptive_avg_pool2d(tissue, (H, W))                             # (B, 1, 7, 7)
+        mask = torch.where(mask > 0.3, mask, torch.zeros_like(mask))
         return mask
-    
+
+
     def multi_circle_mask(self, shape, centers=None, radius=0.15):
         B, C, H, W = shape
         

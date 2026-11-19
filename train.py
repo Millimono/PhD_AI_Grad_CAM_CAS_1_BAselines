@@ -39,8 +39,9 @@ from Model import FullModel
 from scipy.ndimage import label as _cc_label, binary_fill_holes, binary_opening
 from PIL import Image
 
-sys.stdout.reconfigure(encoding="utf-8")
-
+# sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 # --------------------------------------------------------------------------- #
 #  Data / model / optimizer factories — unchanged from the original train.py  #
@@ -61,6 +62,17 @@ def breast_preprocess(img, margin=15, min_thr=20):
     breast = binary_fill_holes(lab == (np.bincount(lab.ravel())[1:].argmax() + 1))
     breast = np.array(Image.fromarray(breast.astype(np.uint8) * 255).resize((g.shape[1], g.shape[0]))) > 127
     return Image.fromarray((g * breast).astype(np.uint8)).convert("RGB")
+
+
+def head_preprocess(img, thr=10):
+    """Garde la tête (plus grande zone non noire, trous bouchés), met le fond à 0, conserve les 3 canaux."""
+    rgb = np.array(img.convert("RGB"))
+    fg = binary_opening(rgb.max(axis=2) > thr, structure=np.ones((3, 3)))
+    lab, n = _cc_label(fg)
+    if n == 0:
+        return Image.fromarray(rgb)
+    head = binary_fill_holes(lab == (np.bincount(lab.ravel())[1:].argmax() + 1))
+    return Image.fromarray(rgb * head[..., None].astype(np.uint8))
 
 
 def _subset(ds, idx):
@@ -205,6 +217,23 @@ def get_dataloader(dataset_name, batch_size, return_test=False):
         for nm, d in [("train", train_dataset), ("val", val_dataset), ("test", test_dataset)]:
             counts = np.bincount(d.targets, minlength=num_classes).tolist()
             print(f"📊 MiniDDSM {nm:5s} : {len(d)} images | {dict(zip(d.classes, counts))}")
+
+
+    elif name == "lgg":
+            tf = transforms.Compose([
+                transforms.Lambda(head_preprocess),
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ])
+            root = "./lgg_split"
+            train_dataset = datasets.ImageFolder(f"{root}/train", transform=tf)
+            val_dataset   = datasets.ImageFolder(f"{root}/val",   transform=tf)
+            test_dataset  = datasets.ImageFolder(f"{root}/test",  transform=tf)
+            num_classes = len(train_dataset.classes)
+            for nm, d in [("train", train_dataset), ("val", val_dataset), ("test", test_dataset)]:
+                counts = np.bincount(d.targets, minlength=num_classes).tolist()
+                print(f"📊 LGG {nm:5s} : {len(d)} images | {dict(zip(d.classes, counts))}")
 
     elif name == "cub200":
         transform_train_cub = transforms.Compose([
@@ -358,7 +387,7 @@ def main():
     # ----------------- Dataset -----------------
     # train_loader, val_loader, num_classes = get_dataloader(cfg.dataset, cfg.batch_size)
 
-    if cfg.dataset.lower() in ("miniddsm", "cifar10"):
+    if cfg.dataset.lower() in ("miniddsm", "cifar10", "lgg"):
         train_loader, val_loader, num_classes, test_loader = get_dataloader(cfg.dataset, cfg.batch_size, return_test=True)
     else:
         train_loader, val_loader, num_classes = get_dataloader(cfg.dataset, cfg.batch_size)
